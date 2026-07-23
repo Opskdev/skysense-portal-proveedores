@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SkySense — Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --sky-deep:#0A1628;--sky-mid:#0F2347;--sky-blue:#1B4B8A;--sky-accent:#2D7DD2;
+      --sky-light:#5BA4F5;--sky-glow:#7EC8E3;--gold-light:#FFD166;
+      --surface:#111E33;--surface3:#1E2E4A;
+      --border:rgba(45,125,210,0.2);--border2:rgba(45,125,210,0.1);
+      --text:#E8F0FE;--text-muted:#7A9CC4;--text-dim:#4A6A8A;
+      --green:#10B981;--yellow:#F59E0B;--red:#EF4444;--purple:#6366F1;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',-apple-system,sans-serif;background:var(--sky-deep);color:var(--text);height:100vh;overflow:hidden}
+    .shell{display:flex;height:100vh}
+
+    /* SIDEBAR */
+    .sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border2);display:flex;flex-direction:column;overflow-y:auto}
+    .sb-logo{padding:18px 16px 14px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px}
+    .sb-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--sky-accent),var(--sky-glow));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+    .sb-title{font-size:13px;font-weight:700}.sb-sub{font-size:10px;color:var(--text-muted)}
+    .sb-section{padding:14px 10px 4px}
+    .sb-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);font-weight:700;padding:0 8px;margin-bottom:6px}
+    .sb-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-muted);transition:all .15s;margin-bottom:1px;text-decoration:none}
+    .sb-item:hover,.sb-item.active{background:rgba(45,125,210,.13);color:var(--sky-light)}
+    .sb-item .ic{width:18px;text-align:center;font-size:14px}
+    .badge{background:var(--sky-accent);color:white;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:auto}
+    .badge.red{background:var(--red)}
+    .sb-bottom{margin-top:auto;padding:12px;border-top:1px solid var(--border2)}
+    .user-chip{display:flex;align-items:center;gap:9px;padding:8px;border-radius:8px}
+    .user-av{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--sky-accent),var(--sky-glow));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+    .user-name{font-size:12px;font-weight:600}.user-role{font-size:10px;color:var(--text-muted)}
+    .logout-btn{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-dim);transition:all .15s;margin-top:4px;border:none;background:none;width:100%;font-family:inherit}
+    .logout-btn:hover{background:rgba(239,68,68,.1);color:#F87171}
+
+    /* MAIN */
+    .main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+    .top-bar{padding:16px 26px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:10;flex-shrink:0}
+    .page-title{font-size:17px;font-weight:700;letter-spacing:-.01em}
+    .page-sub{font-size:12px;color:var(--text-muted);margin-top:2px}
+    .top-actions{display:flex;gap:10px;align-items:center}
+    .btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .2s;font-family:inherit}
+    .btn-accent{background:var(--sky-accent);color:white}.btn-accent:hover{opacity:.85}
+    .btn-ghost{background:var(--surface3);color:var(--text-muted);border:1px solid var(--border)}.btn-ghost:hover{color:var(--text);border-color:var(--sky-accent)}
+    .body-pad{padding:22px 26px;flex:1}
+
+    /* KPI */
+    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:22px}
+    .kpi{background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden}
+    .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+    .kpi.blue::before{background:var(--sky-accent)}.kpi.green::before{background:var(--green)}
+    .kpi.yellow::before{background:var(--yellow)}.kpi.purple::before{background:var(--purple)}
+    .kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);font-weight:600;margin-bottom:8px}
+    .kpi-val{font-size:30px;font-weight:700;letter-spacing:-.03em}
+    .kpi-sub{font-size:11px;color:var(--text-muted);margin-top:4px}
+    .kpi-sub .up{color:var(--green);font-weight:600}
+    .skel-box{height:32px;width:60px;background:var(--surface3);border-radius:6px;animation:pulse 1.5s infinite}
+    @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.9}}
+
+    /* FILTROS */
+    .filter-bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+    .filter-bar .sec-title{font-size:14px;font-weight:600;margin-right:auto}
+    select.fsel{background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:7px 12px;color:var(--text-muted);font-size:11px;font-family:inherit;outline:none;cursor:pointer;appearance:none;padding-right:26px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%237A9CC4' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center}
+    input.fsearch{background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:7px 12px;color:var(--text);font-size:11px;font-family:inherit;outline:none;width:200px;transition:border-color .2s}
+    input.fsearch:focus{border-color:var(--sky-accent)}
+    input.fsearch::placeholder{color:var(--text-dim)}
+
+    /* TABLA */
+    .table-wrap{background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden}
+    table{width:100%;border-collapse:collapse}
+    th{background:var(--surface3);padding:10px 14px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-weight:600;border-bottom:1px solid var(--border2);white-space:nowrap}
+    td{padding:11px 14px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border2);vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr.row:hover td{background:rgba(45,125,210,.04);cursor:pointer}
+    .td-main{color:var(--text);font-weight:500;font-size:13px}
+    .pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+    .pill.pendiente{background:rgba(99,102,241,.15);color:#818CF8}
+    .pill.enrevision{background:rgba(245,158,11,.15);color:#FCD34D}
+    .pill.procesada{background:rgba(16,185,129,.15);color:#34D399}
+    .pill.rechazada{background:rgba(239,68,68,.15);color:#F87171}
+    .dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+    .cur{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px}
+    .cur.mxn{background:rgba(39,174,96,.15);color:#52C788}
+    .cur.usd{background:rgba(41,128,185,.15);color:#5DADE2}
+    .dc{font-size:11px;font-weight:600}
+    .dc.ok{color:var(--green)}.dc.warn{color:var(--yellow)}.dc.bad{color:var(--red)}
+    .amount{font-weight:700;color:var(--text)}
+    .skel-row td{padding:14px}
+    .skel-line{height:11px;border-radius:4px;background:var(--surface3);animation:pulse 1.5s infinite}
+    .empty-state{text-align:center;padding:48px 24px;color:var(--text-dim)}
+    .empty-state .ei{font-size:40px;margin-bottom:12px}
+
+    /* MODAL */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+    .overlay.show{display:flex}
+    .modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;animation:fi .2s ease}
+    @keyframes fi{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+    .mh{padding:20px 24px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1}
+    .mh-title{font-size:16px;font-weight:700}
+    .mh-close{background:var(--surface3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-muted);font-size:16px;transition:all .2s}
+    .mh-close:hover{color:var(--text);border-color:var(--sky-accent)}
+    .mb{padding:24px}
+    .dg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+    .di label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-weight:600;display:block;margin-bottom:4px}
+    .di span{font-size:13px;color:var(--text)}
+    .di.full{grid-column:1/-1}
+    .sep{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);font-weight:700;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--border2)}
+    .doc-list{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+    .doc-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface3);border:1px solid var(--border2);border-radius:8px}
+    .doc-row .dn{flex:1;font-size:12px;color:var(--text)}
+    .doc-row .ds{font-size:10px;color:var(--text-dim)}
+    .ssel{background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:9px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;width:100%;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%237A9CC4' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px}
+    .mf{padding:16px 24px;border-top:1px solid var(--border2);display:flex;gap:10px;justify-content:flex-end}
+
+    /* TOAST */
+    .toast{position:fixed;bottom:24px;right:24px;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:500;z-index:999;display:none;max-width:320px}
+    .toast.show{display:block;animation:fi .3s ease}
+    .toast.ok{background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:#34D399}
+    .toast.err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#F87171}
+
+    ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-icon">✦</div>
+      <div><div class="sb-title">SkySense</div><div class="sb-sub">Portal Proveedores</div></div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Principal</div>
+      <a class="sb-item active" href="skysense_portal_dashboard.html"><span class="ic">📊</span>Dashboard</a>
+      <a class="sb-item" href="skysense_portal_registro.html"><span class="ic">📋</span>Nueva Factura</a>
+      <a class="sb-item" href="skysense_portal_usuarios.html"><span class="ic">🏢</span>Proveedores</a>
+    </div>
+    <div class="sb-section" id="admin-menu">
+      <div class="sb-label">Administración</div>
+      <a class="sb-item" href="skysense_portal_usuarios.html"><span class="ic">👥</span>Usuarios</a>
+      <a class="sb-item" href="skysense_portal_auditoria.html"><span class="ic">🔍</span>Auditoría<span class="badge red">!</span></a>
+      <a class="sb-item" href="skysense_portal_configuracion.html"><span class="ic">⚙️</span>Configuración</a>
+    </div>
+    <div class="sb-bottom">
+      <div class="user-chip">
+        <div class="user-av" id="uav">…</div>
+        <div><div class="user-name" id="uname">Cargando…</div><div class="user-role" id="urole"></div></div>
+      </div>
+      <button class="logout-btn" onclick="logout()">🚪 Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="top-bar">
+      <div><div class="page-title">Dashboard</div><div class="page-sub" id="top-sub">Cargando…</div></div>
+      <div class="top-actions">
+        <button class="btn btn-ghost" onclick="exportCSV()">↓ Exportar Excel</button>
+        <button class="btn btn-accent" onclick="go('skysense_portal_registro.html')">+ Nueva Factura</button>
+      </div>
+    </div>
+
+    <div class="body-pad">
+      <!-- KPIs -->
+      <div class="kpi-grid">
+        <div class="kpi blue"><div class="kpi-label">Facturas este mes</div><div class="kpi-val" id="k-total"><div class="skel-box"></div></div><div class="kpi-sub" id="k-total-s"></div></div>
+        <div class="kpi green"><div class="kpi-label">Procesadas</div><div class="kpi-val" id="k-proc"><div class="skel-box"></div></div><div class="kpi-sub" id="k-proc-s"></div></div>
+        <div class="kpi yellow"><div class="kpi-label">En Revisión</div><div class="kpi-val" id="k-rev"><div class="skel-box"></div></div><div class="kpi-sub">Requieren atención</div></div>
+        <div class="kpi purple"><div class="kpi-label">Monto total MXN</div><div class="kpi-val" id="k-monto" style="font-size:20px"><div class="skel-box"></div></div><div class="kpi-sub" id="k-monto-s"></div></div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="filter-bar">
+        <span class="sec-title">Facturas registradas</span>
+        <input class="fsearch" id="srch" placeholder="🔍 Buscar proveedor o folio…" oninput="filtrar()"/>
+        <select class="fsel" id="f-st" onchange="filtrar()">
+          <option value="">Todos los estados</option>
+          <option>Pendiente</option><option>En Revisión</option><option>Procesada</option><option>Rechazada</option>
+        </select>
+        <select class="fsel" id="f-co" onchange="filtrar()">
+          <option value="">Todos los conceptos</option>
+          <option>Entrega de Materiales</option><option>Anticipo</option><option>Avance de Obra</option>
+        </select>
+        <select class="fsel" id="f-mo" onchange="filtrar()">
+          <option value="">Todas las monedas</option><option>MXN</option><option>USD</option>
+        </select>
+      </div>
+
+      <!-- Tabla -->
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Folio</th><th>Proveedor</th><th>Proyecto</th><th>Concepto</th><th>Pago</th><th>Moneda</th><th>Total</th><th>Estado</th><th>Docs</th><th>Fecha</th></tr></thead>
+          <tbody id="tbody">
+            <tr class="skel-row"><td><div class="skel-line" style="width:70px"></div></td><td><div class="skel-line" style="width:140px"></div></td><td><div class="skel-line" style="width:90px"></div></td><td><div class="skel-line" style="width:110px"></div></td><td><div class="skel-line" style="width:60px"></div></td><td><div class="skel-line" style="width:40px"></div></td><td><div class="skel-line" style="width:80px"></div></td><td><div class="skel-line" style="width:90px"></div></td><td><div class="skel-line" style="width:35px"></div></td><td><div class="skel-line" style="width:75px"></div></td></tr>
+            <tr class="skel-row"><td><div class="skel-line" style="width:70px"></div></td><td><div class="skel-line" style="width:160px"></div></td><td><div class="skel-line" style="width:80px"></div></td><td><div class="skel-line" style="width:120px"></div></td><td><div class="skel-line" style="width:60px"></div></td><td><div class="skel-line" style="width:40px"></div></td><td><div class="skel-line" style="width:80px"></div></td><td><div class="skel-line" style="width:90px"></div></td><td><div class="skel-line" style="width:35px"></div></td><td><div class="skel-line" style="width:75px"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="overlay" id="overlay" onclick="cModal(event)">
+  <div class="modal" id="modal">
+    <div class="mh"><div class="mh-title" id="m-title">Detalle</div><div class="mh-close" onclick="closeM()">✕</div></div>
+    <div class="mb">
+      <div class="dg" id="m-detail"></div>
+      <div class="sep">Documentos adjuntos</div>
+      <div class="doc-list" id="m-docs"></div>
+      <div id="m-status-wrap">
+        <div class="sep">Actualizar estado</div>
+        <select class="ssel" id="m-ssel"><option>Pendiente</option><option>En Revisión</option><option>Procesada</option><option>Rechazada</option></select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeM()">Cerrar</button>
+      <button class="btn btn-accent" id="btn-save" onclick="saveStatus()">Guardar estado</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const SURL='https://vczbnaueqgedssdnylqo.supabase.co';
+  const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjemJuYXVlcWdlZHNzZG55bHFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NjYyMDMsImV4cCI6MjEwMDI0MjIwM30.7BCJmopnWhDcYxWHZUALnvJmhnSnxiucpO2CRxNOiF8';
+  const {createClient}=supabase;
+  const sb=createClient(SURL,SKEY);
+
+  let facturas=[],user=null,fId=null;
+
+  // INIT
+  (async()=>{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){go('index.html');return;}
+    const {data:p}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
+    if(!p||!p.is_active){await sb.auth.signOut();go('index.html');return;}
+    if(p.role==='proveedor'){go('skysense_portal_proveedor.html');return;}
+    user=p;
+    const ini=p.full_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('uav').textContent=ini;
+    document.getElementById('uname').textContent=p.full_name;
+    document.getElementById('urole').textContent=cap(p.role);
+    if(p.role==='compras') document.getElementById('admin-menu').style.display='none';
+    const now=new Date();
+    document.getElementById('top-sub').textContent='Resumen — '+now.toLocaleDateString('es-MX',{month:'long',year:'numeric'});
+    await load();
+  })();
+
+  async function load(){
+    const {data,error}=await sb.from('facturas').select(`
+      id,numero,razon_social,folio_fiscal,moneda,monto_sin_iva,total,
+      condicion_pago,concepto,status,fecha_factura,created_at,
+      proyectos(nombre),documentos(id,tipo,deleted)
+    `).order('created_at',{ascending:false});
+    if(error){toast('Error: '+error.message,'err');return;}
+    facturas=data||[];
+    kpis(facturas);
+    tabla(facturas);
+  }
+
+  function kpis(data){
+    const now=new Date(),m=now.getMonth(),y=now.getFullYear();
+    const dm=data.filter(f=>{const d=new Date(f.created_at);return d.getMonth()===m&&d.getFullYear()===y;});
+    const tot=dm.length,proc=dm.filter(f=>f.status==='Procesada').length;
+    const rev=dm.filter(f=>f.status==='En Revisión').length,pend=dm.filter(f=>f.status==='Pendiente').length;
+    const mMXN=dm.filter(f=>f.moneda==='MXN').reduce((a,f)=>a+parseFloat(f.total||0),0);
+    const mUSD=dm.filter(f=>f.moneda==='USD').reduce((a,f)=>a+parseFloat(f.total||0),0);
+    document.getElementById('k-total').textContent=tot;
+    document.getElementById('k-total-s').innerHTML=`<span class="up">${pend} pendientes</span> este mes`;
+    document.getElementById('k-proc').textContent=proc;
+    document.getElementById('k-proc-s').textContent=tot>0?((proc/tot*100).toFixed(1)+'% del total'):'0%';
+    document.getElementById('k-rev').textContent=rev;
+    document.getElementById('k-monto').textContent='$'+fmt(mMXN);
+    document.getElementById('k-monto-s').textContent=mUSD>0?'+ $'+fmt(mUSD)+' USD':'Solo MXN este mes';
+  }
+
+  function tabla(data){
+    const tb=document.getElementById('tbody');
+    if(!data.length){
+      tb.innerHTML=`<tr><td colspan="10"><div class="empty-state"><div class="ei">📋</div><p>No hay facturas registradas aún.</p></div></td></tr>`;
+      return;
+    }
+    tb.innerHTML=data.map(f=>{
+      const docs=(f.documentos||[]).filter(d=>!d.deleted);
+      const req=docsReq(f.concepto),cnt=docs.length;
+      const dc=cnt>=req?'ok':cnt>0?'warn':'bad';
+      const di=cnt>=req?'✓':cnt>0?'⚠':'✗';
+      const fecha=new Date(f.fecha_factura).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
+      const sc=statusCls(f.status);
+      const mc=f.moneda==='MXN'?'mxn':'usd';
+      const mf=f.moneda==='MXN'?'🇲🇽':'🇺🇸';
+      return `<tr class="row" onclick="openM('${f.id}')">
+        <td class="td-main" style="font-family:monospace;font-size:11px">${f.numero||'—'}</td>
+        <td class="td-main">${f.razon_social}</td>
+        <td>${f.proyectos?.nombre||'—'}</td>
+        <td>${f.concepto}</td>
+        <td style="color:var(--gold-light);font-weight:600">${f.condicion_pago}</td>
+        <td><span class="cur ${mc}">${mf} ${f.moneda}</span></td>
+        <td class="amount">$${fmt(f.total)}</td>
+        <td><span class="pill ${sc}"><span class="dot"></span>${f.status}</span></td>
+        <td><span class="dc ${dc}">${cnt}/${req} ${di}</span></td>
+        <td>${fecha}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function filtrar(){
+    const s=document.getElementById('srch').value.toLowerCase();
+    const st=document.getElementById('f-st').value;
+    const co=document.getElementById('f-co').value;
+    const mo=document.getElementById('f-mo').value;
+    tabla(facturas.filter(f=>
+      (!s||f.razon_social.toLowerCase().includes(s)||(f.numero||'').toLowerCase().includes(s))&&
+      (!st||f.status===st)&&(!co||f.concepto===co)&&(!mo||f.moneda===mo)
+    ));
+  }
+
+  async function openM(id){
+    fId=id;
+    const f=facturas.find(x=>x.id===id);
+    if(!f)return;
+    document.getElementById('m-title').textContent=f.numero||'Detalle';
+    document.getElementById('m-detail').innerHTML=`
+      <div class="di full"><label>Proveedor / Razón Social</label><span>${f.razon_social}</span></div>
+      <div class="di"><label>Folio Fiscal UUID</label><span style="font-family:monospace;font-size:11px">${f.folio_fiscal}</span></div>
+      <div class="di"><label>Proyecto</label><span>${f.proyectos?.nombre||'—'}</span></div>
+      <div class="di"><label>Concepto</label><span>${f.concepto}</span></div>
+      <div class="di"><label>Condición de Pago</label><span>${f.condicion_pago}</span></div>
+      <div class="di"><label>Moneda</label><span>${f.moneda==='MXN'?'🇲🇽 Pesos MXN':'🇺🇸 Dólares USD'}</span></div>
+      <div class="di"><label>Monto sin IVA</label><span>$${fmt(f.monto_sin_iva)} ${f.moneda}</span></div>
+      <div class="di"><label>Total con IVA</label><span style="color:var(--sky-light);font-weight:700">$${fmt(f.total)} ${f.moneda}</span></div>
+      <div class="di"><label>Fecha Factura</label><span>${new Date(f.fecha_factura).toLocaleDateString('es-MX',{day:'2-digit',month:'long',year:'numeric'})}</span></div>
+      <div class="di"><label>Estado</label><span class="pill ${statusCls(f.status)}"><span class="dot"></span>${f.status}</span></div>
+    `;
+    const docs=(f.documentos||[]).filter(d=>!d.deleted);
+    const reqs=docsNombres(f.concepto);
+    document.getElementById('m-docs').innerHTML=reqs.map(r=>{
+      const ex=docs.find(d=>d.tipo===r);
+      return `<div class="doc-row"><span style="font-size:16px">${dIcon(r)}</span>
+        <div><div class="dn">${r}</div><div class="ds">${ex?'Subido':'Pendiente'}</div></div>
+        <span style="font-size:11px;font-weight:600;${ex?'color:var(--green)':'color:var(--red)'}">${ex?'✓ OK':'✗ Faltante'}</span>
+      </div>`;
+    }).join('');
+    const canEdit=['admin','compras'].includes(user?.role);
+    document.getElementById('m-status-wrap').style.display=canEdit?'block':'none';
+    document.getElementById('btn-save').style.display=canEdit?'block':'none';
+    document.getElementById('m-ssel').value=f.status;
+    document.getElementById('overlay').classList.add('show');
+  }
+
+  function cModal(e){if(e.target.id==='overlay')closeM();}
+  function closeM(){document.getElementById('overlay').classList.remove('show');}
+
+  async function saveStatus(){
+    const ns=document.getElementById('m-ssel').value;
+    const f=facturas.find(x=>x.id===fId);
+    if(!f||f.status===ns){closeM();return;}
+    const {error}=await sb.from('facturas').update({status:ns}).eq('id',fId);
+    if(error){toast('Error: '+error.message,'err');return;}
+    await sb.from('audit_log').insert({user_id:user.id,user_role:user.role,action:'STATUS_CHANGE',entity:'factura',entity_id:fId,detail:{de:f.status,a:ns,numero:f.numero}});
+    toast(`Estado actualizado: ${f.status} → ${ns}`,'ok');
+    closeM();
+    await load();
+  }
+
+  function exportCSV(){
+    const h=['Folio','Proveedor','Proyecto','Concepto','Pago','Moneda','Total','Estado','Fecha'];
+    const r=facturas.map(f=>[f.numero||'',f.razon_social,f.proyectos?.nombre||'',f.concepto,f.condicion_pago,f.moneda,f.total,f.status,f.fecha_factura]);
+    const csv=[h,...r].map(x=>x.join(',')).join('\n');
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
+    a.download='facturas_skysense.csv';a.click();
+    toast('Exportación lista ✓','ok');
+  }
+
+  async function logout(){await sb.auth.signOut();go('index.html');}
+  function go(url){window.location.href=url;}
+  function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):'';}
+  function fmt(n){return parseFloat(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function docsReq(c){return c==='Anticipo'?2:3;}
+  function docsNombres(c){
+    if(c==='Anticipo')return['Factura PDF','Factura XML'];
+    if(c==='Entrega de Materiales')return['Evidencia','Factura PDF','Factura XML'];
+    return['Estimación','Factura PDF','Factura XML'];
+  }
+  function dIcon(t){return{'Factura PDF':'📄','Factura XML':'🗂','Estimación':'📋','Evidencia':'📸'}[t]||'📎';}
+  function statusCls(s){return s.toLowerCase().replace(' ','').replace('ó','o').replace('é','e');}
+  function toast(msg,type='ok'){
+    const t=document.getElementById('toast');
+    t.textContent=msg;t.className=`toast ${type} show`;
+    setTimeout(()=>t.classList.remove('show'),3500);
+  }
+</script>
+</body>
+</html>
