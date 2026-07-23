@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkySense — Portal Proveedores</title>
+  <meta name="description" content="Portal de registro de facturas y documentos — SkySense" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --sky-deep:#0A1628;--sky-mid:#0F2347;--sky-blue:#1B4B8A;--sky-accent:#2D7DD2;
+      --sky-light:#5BA4F5;--sky-glow:#7EC8E3;--surface:#111E33;--surface3:#1E2E4A;
+      --border:rgba(45,125,210,0.2);--text:#E8F0FE;--text-muted:#7A9CC4;--text-dim:#4A6A8A;
+      --green:#10B981;--red:#EF4444;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+      background:var(--sky-deep);color:var(--text);min-height:100vh;
+      display:flex;align-items:center;justify-content:center;
+      background:
+        radial-gradient(ellipse at 25% 35%,rgba(27,75,138,.45) 0%,transparent 55%),
+        radial-gradient(ellipse at 75% 75%,rgba(45,125,210,.18) 0%,transparent 50%),
+        #0A1628;
+    }
+    .login-card{
+      background:var(--surface);border:1px solid var(--border);border-radius:18px;
+      padding:48px 42px;width:100%;max-width:400px;
+      box-shadow:0 28px 70px rgba(0,0,0,.55);
+    }
+    .logo-block{text-align:center;margin-bottom:38px}
+    .logo-icon{
+      width:60px;height:60px;
+      background:linear-gradient(135deg,var(--sky-accent),var(--sky-glow));
+      border-radius:16px;display:inline-flex;align-items:center;justify-content:center;
+      font-size:28px;margin-bottom:14px;box-shadow:0 10px 28px rgba(45,125,210,.45);
+    }
+    .logo-name{font-size:22px;font-weight:700;letter-spacing:-.02em}
+    .logo-sub{font-size:13px;color:var(--text-muted);margin-top:3px}
+    label{
+      display:block;font-size:11px;font-weight:600;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;
+    }
+    input[type="email"],input[type="password"]{
+      width:100%;background:var(--surface3);border:1px solid var(--border);
+      border-radius:9px;padding:12px 15px;color:var(--text);font-size:14px;
+      font-family:inherit;outline:none;transition:border-color .2s;margin-bottom:16px;
+    }
+    input:focus{border-color:var(--sky-accent)}
+    .forgot{
+      display:block;text-align:right;font-size:12px;color:var(--sky-light);
+      cursor:pointer;margin-top:-10px;margin-bottom:22px;text-decoration:none;
+    }
+    .forgot:hover{text-decoration:underline}
+    .btn-login{
+      width:100%;background:linear-gradient(135deg,var(--sky-accent),var(--sky-blue));
+      border:none;border-radius:9px;padding:14px;color:white;
+      font-size:15px;font-weight:700;cursor:pointer;
+      transition:opacity .2s,transform .1s;letter-spacing:.02em;
+    }
+    .btn-login:hover{opacity:.9;transform:translateY(-1px)}
+    .btn-login:active{transform:translateY(0)}
+    .btn-login:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .msg{
+      margin-top:14px;padding:10px 14px;border-radius:8px;
+      font-size:12px;text-align:center;display:none;
+    }
+    .msg.error{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#F87171}
+    .msg.success{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34D399}
+    .msg.show{display:block}
+    .spinner{
+      display:inline-block;width:16px;height:16px;
+      border:2px solid rgba(255,255,255,.3);border-top-color:white;
+      border-radius:50%;animation:spin .7s linear infinite;
+      vertical-align:middle;margin-right:8px;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .login-note{
+      text-align:center;font-size:11px;color:var(--text-dim);
+      margin-top:20px;line-height:1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="logo-block">
+      <div class="logo-icon">✦</div>
+      <div class="logo-name">SkySense</div>
+      <div class="logo-sub">Portal Proveedores</div>
+    </div>
+
+    <label for="email">Correo electrónico</label>
+    <input id="email" type="email" placeholder="correo@empresa.com" autocomplete="email"/>
+
+    <label for="password">Contraseña</label>
+    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password"/>
+
+    <a class="forgot" href="#" id="forgot-link">¿Olvidaste tu contraseña?</a>
+
+    <button class="btn-login" id="btn-login" onclick="handleLogin()">Ingresar</button>
+
+    <div class="msg error"   id="msg-error"></div>
+    <div class="msg success" id="msg-success"></div>
+
+    <p class="login-note">
+      Tu acceso y permisos están configurados por el administrador del portal.<br/>
+      Si tienes problemas para ingresar, comunícate con el equipo de compras.
+    </p>
+  </div>
+
+  <script>
+    // ── CREDENCIALES SUPABASE ─────────────────────────────────
+    const SUPABASE_URL  = 'https://vczbnaueqgedssdnylqo.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjemJuYXVlcWdlZHNzZG55bHFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NjYyMDMsImV4cCI6MjEwMDI0MjIwM30.7BCJmopnWhDcYxWHZUALnvJmhnSnxiucpO2CRxNOiF8';
+
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+    // ── HELPERS ───────────────────────────────────────────────
+    function showMsg(type, text) {
+      const el = document.getElementById('msg-' + type);
+      el.textContent = text;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 5000);
+    }
+
+    function setLoading(loading) {
+      const btn = document.getElementById('btn-login');
+      btn.disabled = loading;
+      btn.innerHTML = loading
+        ? '<span class="spinner"></span>Ingresando…'
+        : 'Ingresar';
+    }
+
+    // ── LOGIN ─────────────────────────────────────────────────
+    async function handleLogin() {
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!email || !password) {
+        showMsg('error', 'Por favor ingresa tu correo y contraseña.');
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        // 1. Autenticar con Supabase Auth
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+
+        // 2. Obtener perfil y rol
+        const { data: profile, error: profileError } = await sb
+          .from('profiles')
+          .select('role, full_name, is_active')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError || !profile) throw new Error('No se encontró tu perfil. Contacta al administrador.');
+        if (!profile.is_active)       throw new Error('Tu cuenta está desactivada. Contacta al administrador.');
+
+        showMsg('success', `Bienvenido, ${profile.full_name}. Redirigiendo…`);
+
+        // 3. Redirigir según rol
+        setTimeout(() => {
+          const routes = {
+            admin:     'dashboard.html',
+            compras:   'dashboard.html',
+            proveedor: 'proveedor.html',
+          };
+          window.location.href = routes[profile.role] || 'dashboard.html';
+        }, 1000);
+
+      } catch (err) {
+        const errores = {
+          'Invalid login credentials': 'Correo o contraseña incorrectos.',
+          'Email not confirmed':       'Debes confirmar tu correo antes de ingresar.',
+          'Too many requests':         'Demasiados intentos. Espera unos minutos.',
+        };
+        showMsg('error', errores[err.message] || err.message || 'Error al ingresar. Intenta de nuevo.');
+        setLoading(false);
+      }
+    }
+
+    // ── RECUPERAR CONTRASEÑA ──────────────────────────────────
+    document.getElementById('forgot-link').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      if (!email) {
+        showMsg('error', 'Ingresa tu correo primero para recuperar tu contraseña.');
+        return;
+      }
+      const { error } = await sb.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/reset-password.html',
+      });
+      if (error) {
+        showMsg('error', 'Error al enviar el correo. Intenta de nuevo.');
+      } else {
+        showMsg('success', 'Te enviamos un correo para restablecer tu contraseña.');
+      }
+    });
+
+    // ── ENTER KEY ─────────────────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleLogin();
+    });
+
+    // ── SESIÓN ACTIVA → REDIRIGIR ─────────────────────────────
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        const { data: profile } = await sb
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        if (profile?.role) {
+          const routes = { admin:'dashboard.html', compras:'dashboard.html', proveedor:'proveedor.html' };
+          window.location.href = routes[profile.role] || 'dashboard.html';
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
