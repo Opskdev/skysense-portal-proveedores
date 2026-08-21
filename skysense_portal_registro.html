@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SkySense — Registro de Factura</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --sky-deep:#0A1628;--sky-mid:#0F2347;--sky-blue:#1B4B8A;--sky-accent:#2D7DD2;
+      --sky-light:#5BA4F5;--sky-glow:#7EC8E3;--gold-light:#FFD166;
+      --surface:#111E33;--surface3:#1E2E4A;
+      --border:rgba(45,125,210,0.2);--border2:rgba(45,125,210,0.1);
+      --text:#E8F0FE;--text-muted:#7A9CC4;--text-dim:#4A6A8A;
+      --green:#10B981;--yellow:#F59E0B;--red:#EF4444;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',-apple-system,sans-serif;background:var(--sky-deep);color:var(--text);height:100vh;overflow:hidden}
+    .shell{display:flex;height:100vh}
+
+    /* SIDEBAR */
+    .sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border2);display:flex;flex-direction:column}
+    .sb-logo{padding:18px 16px 14px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px}
+    .sb-logo img{width:28px;height:28px;object-fit:contain}
+    .sb-title{font-size:13px;font-weight:700}.sb-sub{font-size:10px;color:var(--text-muted)}
+    .sb-section{padding:14px 10px 4px}
+    .sb-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);font-weight:700;padding:0 8px;margin-bottom:6px}
+    .sb-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-muted);transition:all .15s;margin-bottom:1px;text-decoration:none}
+    .sb-item:hover,.sb-item.active{background:rgba(45,125,210,.13);color:var(--sky-light)}
+    .sb-item .ic{width:18px;text-align:center;font-size:14px}
+    .sb-bottom{margin-top:auto;padding:12px;border-top:1px solid var(--border2)}
+    .user-chip{display:flex;align-items:center;gap:9px;padding:8px}
+    .user-av{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--sky-accent),var(--sky-glow));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+    .user-name{font-size:12px;font-weight:600}.user-role{font-size:10px;color:var(--text-muted)}
+    .logout-btn{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-dim);border:none;background:none;width:100%;font-family:inherit;margin-top:4px}
+    .logout-btn:hover{background:rgba(239,68,68,.1);color:#F87171}
+
+    /* MAIN */
+    .main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+    .top-bar{padding:16px 26px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:10;flex-shrink:0}
+    .page-title{font-size:17px;font-weight:700;letter-spacing:-.01em}
+    .page-sub{font-size:12px;color:var(--text-muted);margin-top:2px}
+    .btn{padding:9px 18px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .2s;font-family:inherit}
+    .btn-accent{background:var(--sky-accent);color:white}.btn-accent:hover{opacity:.85}
+    .btn-accent:disabled{opacity:.5;cursor:not-allowed}
+    .btn-ghost{background:var(--surface3);color:var(--text-muted);border:1px solid var(--border)}.btn-ghost:hover{color:var(--text);border-color:var(--sky-accent)}
+    .body-pad{padding:24px 32px 48px;max-width:860px;margin:0 auto;width:100%}
+
+    /* STEPS */
+    .steps{display:flex;gap:0;margin-bottom:28px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden}
+    .step{flex:1;padding:14px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-dim);border-right:1px solid var(--border2);transition:all .2s}
+    .step:last-child{border-right:none}
+    .step.active{background:rgba(45,125,210,.1);color:var(--sky-light)}
+    .step.done{color:var(--green)}
+    .step-num{width:22px;height:22px;border-radius:6px;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+    .step.active .step-num{background:var(--sky-accent);color:white}
+    .step.done .step-num{background:var(--green);color:white}
+
+    /* CARDS */
+    .form-card{background:var(--surface);border:1px solid var(--border2);border-radius:14px;overflow:hidden;margin-bottom:16px}
+    .card-header{padding:14px 22px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:12px;background:var(--surface3)}
+    .card-num{width:26px;height:26px;border-radius:7px;background:var(--sky-accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;flex-shrink:0}
+    .card-title{font-size:13px;font-weight:600}
+    .card-body{padding:22px}
+    .fg{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .fg.g3{grid-template-columns:1fr 1fr 1fr}
+    .fg.g4{grid-template-columns:1fr 1fr 1fr 1fr}
+    .fgroup{display:flex;flex-direction:column;gap:6px}
+    .fgroup.full{grid-column:1/-1}
+    .flabel{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)}
+    .flabel .req{color:var(--red)}
+    .finput{background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .2s;width:100%}
+    .finput:focus{border-color:var(--sky-accent)}
+    .finput.error{border-color:var(--red)}
+    .fselect{background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%237A9CC4' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;transition:border-color .2s;width:100%}
+    .fselect:focus{border-color:var(--sky-accent)}
+    .ferror{font-size:11px;color:var(--red);display:none}
+    .ferror.show{display:block}
+
+    /* MONEDA */
+    .currency-sel{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;height:42px}
+    .currency-opt{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;font-family:inherit;border:none;background:var(--surface3);color:var(--text-dim)}
+    .currency-opt.sel-mxn{background:rgba(39,174,96,.15);color:#52C788}
+    .currency-opt.sel-usd{background:rgba(41,128,185,.15);color:#5DADE2}
+    .monto-wrap{position:relative}
+    .monto-pre{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700;pointer-events:none;z-index:1}
+    .monto-pre.mxn{color:#52C788}.monto-pre.usd{color:#5DADE2}
+    .finput-monto{padding-left:48px !important}
+    .cur-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;margin-left:8px}
+    .cur-badge.mxn{background:rgba(39,174,96,.12);color:#52C788}
+    .cur-badge.usd{background:rgba(41,128,185,.12);color:#5DADE2}
+    .cur-info{padding:10px 14px;border-radius:8px;font-size:12px;display:flex;align-items:center;gap:8px;margin-top:12px}
+    .cur-info.mxn{background:rgba(39,174,96,.07);border:1px solid rgba(39,174,96,.2);color:#52C788}
+    .cur-info.usd{background:rgba(41,128,185,.07);border:1px solid rgba(41,128,185,.2);color:#5DADE2}
+
+    /* CONDICIONAL */
+    .cond-block{background:rgba(45,125,210,.06);border:1px solid rgba(45,125,210,.2);border-radius:10px;padding:16px;margin-top:10px;display:none;animation:fi .3s ease}
+    .cond-block.show{display:block}
+    .cond-label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--sky-light);font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+    .cond-label::before{content:"↳";font-size:13px}
+    @keyframes fi{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+    /* UPLOAD */
+    .docs-grid{display:grid;gap:12px}
+    .docs-grid.d2{grid-template-columns:1fr 1fr}
+    .docs-grid.d3{grid-template-columns:1fr 1fr 1fr}
+    .doc-item{}
+    .doc-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;margin-bottom:8px}
+    .doc-tag.req{background:rgba(240,165,0,.12);border:1px solid rgba(240,165,0,.3);color:var(--gold-light)}
+    .doc-tag.done{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34D399}
+    .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface3);position:relative}
+    .upload-zone:hover{border-color:var(--sky-accent);background:rgba(45,125,210,.05)}
+    .upload-zone.uploaded{border-color:var(--green);border-style:solid;background:rgba(16,185,129,.05)}
+    .upload-zone.uploading{border-color:var(--sky-accent);background:rgba(45,125,210,.05)}
+    .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+    .uz-icon{font-size:26px;margin-bottom:6px}
+    .uz-text{font-size:12px;color:var(--text-muted)}
+    .uz-sub{font-size:10px;color:var(--text-dim);margin-top:2px}
+    .docs-alert{padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px}
+    .docs-alert.warn{background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.2);color:var(--gold-light)}
+    .docs-alert.info{background:rgba(45,125,210,.08);border:1px solid rgba(45,125,210,.2);color:var(--sky-light)}
+
+    /* PROGRESS BAR */
+    .progress-bar{height:3px;background:var(--border2);border-radius:2px;overflow:hidden;margin-top:8px;display:none}
+    .progress-bar.show{display:block}
+    .progress-fill{height:100%;background:var(--sky-accent);border-radius:2px;transition:width .3s;width:0%}
+
+    /* TOAST */
+    .toast{position:fixed;bottom:24px;right:24px;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:500;z-index:999;display:none;max-width:320px}
+    .toast.show{display:block;animation:fi .3s ease}
+    .toast.ok{background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:#34D399}
+    .toast.err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#F87171}
+
+    ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  
+    /* ═══ TEMA CLARO ═══ */
+    body.theme-light{
+      --sky-deep:#F4F6FA;--sky-mid:#E8EDF5;--sky-blue:#1B4B8A;
+      --surface:#FFFFFF;--surface3:#F1F4F9;
+      --border:rgba(45,125,210,0.25);--border2:rgba(15,35,71,0.08);
+      --text:#1A1A2E;--text-muted:#5B6B82;--text-dim:#94A3B8;
+    }
+    body.theme-light .kpi-val,body.theme-light .stat-num{color:#1A1A2E}
+    body.theme-light .fc-amount,body.theme-light .fc-folio{color:#1A1A2E}
+    .theme-toggle{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-dim);border:none;background:none;width:100%;font-family:inherit;transition:all .15s}
+    .theme-toggle:hover{background:rgba(45,125,210,.1);color:var(--sky-light)}
+
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sb-logo">
+      <img src="data:image/png;base64,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" alt="SkySense"/>
+      <div><div class="sb-title">SkySense</div><div class="sb-sub">Portal Proveedores</div></div>
+    </div>
+    <div class="sb-section" id="nav-admin" style="display:none">
+      <div class="sb-label">Principal</div>
+      <a class="sb-item" href="skysense_portal_dashboard.html"><span class="ic">📊</span>Dashboard</a>
+      <a class="sb-item active" href="skysense_portal_registro.html"><span class="ic">📋</span>Nueva Factura</a>
+      <a class="sb-item" href="skysense_portal_proveedores.html"><span class="ic">🏢</span>Proveedores</a>
+    </div>
+    <div class="sb-section" id="admin-menu" style="display:none">
+      <div class="sb-label">Administración</div>
+      <a class="sb-item" href="skysense_portal_usuarios.html"><span class="ic">👥</span>Alta Usuarios/Proveedores</a>
+      <a class="sb-item" href="skysense_portal_auditoria.html"><span class="ic">🔍</span>Auditoría</a>
+      <a class="sb-item" href="skysense_portal_configuracion.html"><span class="ic">⚙️</span>Configuración</a>
+    </div>
+    <div class="sb-section" id="nav-proveedor" style="display:none">
+      <div class="sb-label">Principal</div>
+      <a class="sb-item" href="skysense_portal_proveedor.html"><span class="ic">🏢</span>Mis Facturas</a>
+      <a class="sb-item active" href="skysense_portal_registro.html"><span class="ic">📋</span>Registro de Factura</a>
+    </div>
+    <div class="sb-bottom">
+      <div class="user-chip">
+        <div class="user-av" id="uav">…</div>
+        <div><div class="user-name" id="uname">Cargando…</div><div class="user-role" id="urole"></div></div>
+      </div>
+      <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Tema Oscuro</button>
+      <button class="logout-btn" onclick="logout()">🚪 Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="top-bar">
+      <div>
+        <div class="page-title">Registro de Factura</div>
+        <div class="page-sub">Completa todos los campos — los documentos requeridos cambian según el concepto</div>
+      </div>
+      <button class="btn btn-ghost" onclick="history.back()">← Volver</button>
+    </div>
+
+    <div class="body-pad">
+
+      <!-- STEPS INDICADOR -->
+      <div class="steps">
+        <div class="step active" id="step1"><div class="step-num">1</div>Datos de la Factura</div>
+        <div class="step" id="step2"><div class="step-num">2</div>Moneda y Montos</div>
+        <div class="step" id="step3"><div class="step-num">3</div>Condiciones y Concepto</div>
+        <div class="step" id="step4"><div class="step-num">4</div>Documentos</div>
+      </div>
+
+      <!-- PASO 1: DATOS -->
+      <div class="form-card">
+        <div class="card-header"><div class="card-num">1</div><div class="card-title">Datos de la Factura</div></div>
+        <div class="card-body">
+          <div class="fg">
+            <div class="fgroup full">
+              <label class="flabel">Nombre / Razón Social <span class="req">*</span></label>
+              <input class="finput" id="razon_social" placeholder="Ej. Constructora Pérez SA de CV" oninput="validateField(this)"/>
+              <span class="ferror" id="err-razon">Este campo es requerido</span>
+            </div>
+            <div class="fgroup">
+              <label class="flabel">Fecha de emisión de la factura <span class="req">*</span></label>
+              <input class="finput" id="fecha_factura" type="date" oninput="validateField(this)"/>
+              <span style="font-size:10px;color:var(--text-dim);display:block;margin-top:3px;line-height:1.4">Es la fecha del CFDI. Los días de crédito se cuentan desde la fecha y hora en que subes la factura al portal.</span>
+              <span class="ferror" id="err-fecha">Este campo es requerido</span>
+            </div>
+            <div class="fgroup">
+              <label class="flabel">Orden de Compra <span class="req">*</span></label>
+              <input class="finput" id="orden_compra" placeholder="OC-2026-001" oninput="validateField(this)"/>
+              <span class="ferror" id="err-orden">Este campo es requerido</span>
+            </div>
+            <div class="fgroup full">
+              <label class="flabel">Folio Fiscal UUID (SAT) <span class="req">*</span></label>
+              <input class="finput" id="folio_fiscal" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" style="font-family:monospace;font-size:12px" oninput="validateUUID(this)"/>
+              <span class="ferror" id="err-folio">Formato inválido — debe ser UUID del SAT</span>
+            </div>
+            <div class="fgroup">
+              <label class="flabel">Proyecto <span class="req">*</span></label>
+              <input class="finput" id="proyecto" placeholder="Nombre del proyecto" oninput="validateField(this)"/>
+              <span class="ferror" id="err-proyecto">Este campo es requerido</span>
+            </div>
+            <div class="fgroup">
+              <label class="flabel">Responsable</label>
+              <input class="finput" id="responsable" placeholder="Nombre del responsable"/>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PASO 2: MONEDA Y MONTOS -->
+      <div class="form-card">
+        <div class="card-header">
+          <div class="card-num">2</div>
+          <div class="card-title">Moneda y Montos <span class="cur-badge mxn" id="cur-badge-header">🇲🇽 MXN</span></div>
+        </div>
+        <div class="card-body">
+          <div class="fgroup" style="margin-bottom:16px">
+            <label class="flabel">Selecciona la moneda <span class="req">*</span></label>
+            <div class="currency-sel">
+              <button class="currency-opt sel-mxn" id="opt-mxn" onclick="setCurrency('mxn')">🇲🇽 &nbsp;Pesos Mexicanos (MXN)</button>
+              <button class="currency-opt" id="opt-usd" onclick="setCurrency('usd')">🇺🇸 &nbsp;Dólares (USD)</button>
+            </div>
+          </div>
+          <div class="fg">
+            <div class="fgroup">
+              <label class="flabel">Monto sin IVA <span class="req">*</span></label>
+              <div class="monto-wrap">
+                <span class="monto-pre mxn" id="pre-sin">$</span>
+                <input class="finput finput-monto" id="monto_sin_iva" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcTotal()"/>
+              </div>
+              <span class="ferror" id="err-monto">Ingresa un monto válido</span>
+            </div>
+            <div class="fgroup">
+              <label class="flabel" id="label-iva">IVA (16%)</label>
+              <div class="monto-wrap">
+                <span class="monto-pre mxn" id="pre-iva">$</span>
+                <input class="finput finput-monto" id="iva_calculado" type="number" placeholder="0.00" readonly style="opacity:.6;cursor:not-allowed"/>
+              </div>
+              <label style="display:none">
+                <input type="checkbox" id="iva_mexicali"/>
+              </label>
+              <select class="finput" id="iva_tasa_sel" onchange="calcTotal()" style="margin-top:6px;font-size:12px">
+                <option value="16">IVA 16% — tasa general</option>
+                <option value="8">IVA 8% — tasa fronteriza (Mexicali)</option>
+                <option value="0">IVA 0% — exento / residente en el extranjero</option>
+              </select>
+              <div id="iva-hint" style="font-size:10px;color:var(--text-dim);margin-top:4px;line-height:1.4"></div>
+              <div id="alerta-retenciones" style="display:none;font-size:11px;color:#F87171;margin-top:6px;padding:8px 10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;line-height:1.4"></div>
+            </div>
+            <div class="fgroup">
+              <label class="flabel">Total con IVA</label>
+              <div class="monto-wrap">
+                <span class="monto-pre mxn" id="pre-subtotal">$</span>
+                <input class="finput finput-monto" id="subtotal_con_iva" type="number" readonly style="opacity:.7;cursor:not-allowed"/>
+              </div>
+            </div>
+            <div class="fgroup" style="align-self:flex-end">
+              <div class="cur-info mxn" id="cur-info">🇲🇽 <strong>Moneda: Pesos Mexicanos (MXN)</strong></div>
+            </div>
+          </div>
+
+          <!-- RETENCIONES -->
+          <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border2)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <label class="flabel" style="margin:0">Retenciones (ISR, etc.)</label>
+              <button type="button" class="btn btn-sm btn-ghost" onclick="agregarRetencion()">+ Agregar retención</button>
+            </div>
+            <div id="retenciones-wrap" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+
+          <!-- TOTAL FINAL -->
+          <div style="margin-top:16px;padding:14px 18px;background:rgba(45,125,210,.08);border:1px solid rgba(45,125,210,.2);border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13px;font-weight:600;color:var(--sky-light)">Total a Pagar (después de retenciones)</span>
+            <span id="total-final-display" style="font-size:20px;font-weight:700;color:var(--sky-light)">$0.00</span>
+          </div>
+          <input type="hidden" id="total"/>
+        </div>
+      </div>
+
+      <!-- PASO 3: CONDICIONES + CONCEPTO -->
+      <div class="form-card">
+        <div class="card-header"><div class="card-num">3</div><div class="card-title">Condiciones de Pago y Concepto</div></div>
+        <div class="card-body">
+          <div class="fg">
+            <div class="fgroup">
+              <label class="flabel">Condiciones de Pago <span class="req">*</span></label>
+              <select class="fselect" id="condicion_pago" onchange="chgCond(this.value)">
+                <option value="">— Seleccionar —</option>
+              </select>
+              <span class="ferror" id="err-condicion">Selecciona una condición</span>
+              <div class="cond-block" id="cb-15dias">
+                <div class="cond-label">15 días · Información adicional</div>
+                <label class="flabel">Banco receptor</label>
+                <input class="finput" id="banco_receptor" placeholder="Nombre del banco" style="margin-top:6px"/>
+              </div>
+              <div class="cond-block" id="cb-30dias">
+                <div class="cond-label">30 días</div>
+                <p style="font-size:11px;color:var(--text-muted)">El pago se procesará conforme a las condiciones acordadas.</p>
+              </div>
+              <div class="cond-block" id="cb-45dias">
+                <div class="cond-label">45 días</div>
+                <p style="font-size:11px;color:var(--text-muted)">El pago se procesará conforme a las condiciones acordadas.</p>
+              </div>
+              <div class="cond-block" id="cb-contado">
+                <div class="cond-label">Contado</div>
+                <p style="font-size:11px;color:var(--text-muted)">Normalmente se procesa en máximo 3 días hábiles.</p>
+              </div>
+            </div>
+            <div class="fgroup">
+              <label class="flabel">Concepto <span class="req">*</span></label>
+              <select class="fselect" id="concepto" onchange="chgConc(this.value)">
+                <option value="">— Seleccionar —</option>
+              </select>
+              <span class="ferror" id="err-concepto">Selecciona un concepto</span>
+              <div class="cond-block" id="cv-info" style="display:none">
+                <div class="cond-label" id="cv-info-title">Documentos</div>
+                <p style="font-size:11px;color:var(--text-muted)">Se requerirán: <strong style="color:var(--gold-light)" id="cv-info-docs"></strong></p>
+              </div>
+            </div>
+            <!-- Campo de anotaciones: aparece solo en los conceptos que lo piden.
+                 Es un DATO del concepto, distinto de los comentarios de la factura. -->
+            <div class="fgroup" id="grp-anotaciones" style="display:none">
+              <label class="flabel" id="label-anotaciones">Anotaciones</label>
+              <textarea class="finput" id="anotaciones" rows="3" style="resize:vertical;font-family:inherit"
+                placeholder="Escribe aquí la información correspondiente…"></textarea>
+              <span style="font-size:10px;color:var(--text-dim);display:block;margin-top:3px">Este dato queda guardado como parte del registro de la factura.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PASO 4: DOCUMENTOS DINÁMICOS -->
+      <div class="form-card" id="docs-card">
+        <div class="card-header">
+          <div class="card-num">4</div>
+          <div class="card-title">Documentos Requeridos — <span id="docs-concepto-label" style="color:var(--gold-light)">selecciona un concepto arriba</span></div>
+        </div>
+        <div class="card-body" id="docs-body">
+          <div class="docs-alert info">ℹ Selecciona el concepto en el Paso 3 para ver los documentos requeridos.</div>
+        </div>
+      </div>
+
+      <!-- ACCIONES -->
+      <div id="aviso-envio" style="display:none;font-size:11px;color:var(--gold-light);text-align:right;margin-bottom:8px;line-height:1.5"></div>
+      <div style="display:flex;gap:12px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="guardarBorrador()" id="btn-borrador">Guardar borrador</button>
+        <button class="btn btn-accent" onclick="enviarFactura()" id="btn-enviar">Enviar factura →</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const SURL="https://vczbnaueqgedssdnylqo.supabase.co";
+  const SKEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjemJuYXVlcWdlZHNzZG55bHFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NjYyMDMsImV4cCI6MjEwMDI0MjIwM30.7BCJmopnWhDcYxWHZUALnvJmhnSnxiucpO2CRxNOiF8";
+  const {createClient}=supabase;
+  const sb=createClient(SURL,SKEY);
+  function initTheme(){
+    const saved=localStorage.getItem('skysense_theme')||'dark';
+    if(saved==='light')document.body.classList.add('theme-light');
+    updateThemeIcon();
+  }
+  function toggleTheme(){
+    document.body.classList.toggle('theme-light');
+    localStorage.setItem('skysense_theme',document.body.classList.contains('theme-light')?'light':'dark');
+    updateThemeIcon();
+  }
+  function updateThemeIcon(){
+    const btn=document.getElementById('theme-toggle-btn');
+    if(!btn)return;
+    const isLight=document.body.classList.contains('theme-light');
+    btn.innerHTML=isLight?'☀️ Tema Claro':'🌙 Tema Oscuro';
+  }
+  initTheme();
+
+
+  let user=null, moneda="mxn", archivos={}, facturaId=null, editMode=false, editFactura=null, esBorrador=false;
+
+  // INIT
+  (async()=>{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){go("index.html");return;}
+    const {data:p}=await sb.from("profiles").select("*").eq("id",session.user.id).maybeSingle();
+    if(!p||!p.is_active){await sb.auth.signOut();go("index.html");return;}
+    user=p;
+    const ini=p.full_name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+    document.getElementById("uav").textContent=ini;
+    document.getElementById("uname").textContent=p.full_name;
+    document.getElementById("urole").textContent=cap(p.role);
+
+    // Catálogos de Configuración antes de cualquier render del formulario
+    await cargarCatalogos();
+    actualizarBotonEnviar();
+
+    // Sidebar según rol — CADA ROL VE SOLO LO SUYO
+    if(p.role==="proveedor"){
+      document.getElementById("nav-proveedor").style.display="block";
+    }else{
+      document.getElementById("nav-admin").style.display="block";
+      // Solo Admin y Ricardo (Super Compras) ven el menú de Administración
+      if(p.role==="admin"||(p.role==="compras"&&p.is_supercompras)){
+        document.getElementById("admin-menu").style.display="block";
+      }
+    }
+
+    await loadCatalogos();
+
+    // ── DETECTAR MODO EDICIÓN ──
+    const params=new URLSearchParams(window.location.search);
+    const editId=params.get("edit");
+    if(editId){
+      await cargarFacturaParaEditar(editId);
+    }else{
+      // Solo pre-llenar si es factura NUEVA
+      if(p.role==="proveedor"&&p.company_name){
+        document.getElementById("razon_social").value=p.company_name;
+      }
+    }
+  })();
+
+  // ── CARGAR FACTURA EXISTENTE PARA EDITAR ──
+  async function cargarFacturaParaEditar(id){
+    document.querySelector(".page-title").textContent="Editar Factura";
+    document.querySelector(".page-sub").textContent="Modifica los datos y guarda los cambios";
+
+    const {data:f,error}=await sb.from("facturas").select(`
+      id,numero,proveedor_id,razon_social,fecha_factura,orden_compra,folio_fiscal,
+      proyecto,responsable,moneda,monto_sin_iva,total,condicion_pago,iva_tasa,iva_monto,retenciones,total_retenciones,
+      fecha_estimada_pago,banco_receptor,concepto,status,
+      documentos(id,tipo,nombre_archivo,storage_path,deleted)
+    `).eq("id",id).maybeSingle();
+
+    if(error||!f){toast("No se encontró la factura","err");setTimeout(()=>go(user.role==="proveedor"?"skysense_portal_proveedor.html":"skysense_portal_dashboard.html"),1500);return;}
+
+    // Seguridad: la autorización ya la hizo RLS. Si la consulta anterior
+    // devolvió la fila, este usuario tiene permiso de verla (política
+    // "Proveedor ve las facturas de su empresa"). Volver a validarlo aquí
+    // consultando `profiles` fallaba siempre: RLS solo deja a un proveedor
+    // leer su PROPIO perfil, así que la empresa del dueño venía en null y
+    // el sistema expulsaba al usuario de facturas que sí le corresponden.
+    if(user.role==="proveedor"){
+      // Editable mientras no haya llegado a Compras: Borrador o Pendiente.
+      // Un borrador está por definición a medias, así que debe poder abrirse
+      // y completarse; olvidarlo aquí lo dejaba inaccesible para siempre.
+      if(f.status!=="Pendiente" && f.status!=="Borrador"){
+        toast("Esta factura ya está en revisión y no puede editarse","err");
+        setTimeout(()=>go("skysense_portal_proveedor.html"),1800);
+        return;
+      }
+      esBorrador = (f.status==="Borrador");
+    }
+
+    editMode=true;
+    facturaId=f.id;
+    editFactura=f;
+
+    // Llenar campos básicos
+    document.getElementById("razon_social").value=f.razon_social||"";
+    document.getElementById("fecha_factura").value=f.fecha_factura||"";
+    document.getElementById("orden_compra").value=f.orden_compra||"";
+    document.getElementById("folio_fiscal").value=f.folio_fiscal||"";
+    document.getElementById("proyecto").value=f.proyecto||"";
+    document.getElementById("responsable").value=f.responsable||user.full_name;
+
+    // Moneda
+    setCurrency(f.moneda==="USD"?"usd":"mxn");
+    document.getElementById("monto_sin_iva").value=f.monto_sin_iva;
+    document.getElementById("iva_tasa_sel").value=String(f.iva_tasa!=null?f.iva_tasa:16);
+    // Restaurar retenciones guardadas
+    document.getElementById("retenciones-wrap").innerHTML="";
+    retencionesCount=0;
+    (f.retenciones||[]).forEach(monto=>agregarRetencion(monto));
+    calcTotal();
+
+    // Condición de pago
+    document.getElementById("condicion_pago").value=f.condicion_pago;
+    chgCond(f.condicion_pago);
+    if(f.banco_receptor) document.getElementById("banco_receptor").value=f.banco_receptor;
+
+    // Concepto → renderiza documentos
+    document.getElementById("concepto").value=f.concepto;
+    chgConc(f.concepto);
+
+    // Marcar documentos ya subidos como completados visualmente
+    setTimeout(()=>{
+      const docsExistentes=(f.documentos||[]).filter(d=>!d.deleted);
+      const docIdMap={"Evidencia":"evidencia","Factura PDF":"factura_pdf","Factura XML":"factura_xml","Estimación":"estimacion"};
+      docsExistentes.forEach(doc=>{
+        const domId=docIdMap[doc.tipo];
+        if(!domId)return;
+        const zone=document.getElementById("zone-"+domId);
+        const tag=document.getElementById("tag-"+domId);
+        const txt=document.getElementById("utext-"+domId);
+        if(zone&&tag&&txt){
+          zone.classList.add("uploaded");
+          tag.className="doc-tag done";
+          tag.textContent="✓ "+doc.tipo+" (ya subido)";
+          txt.textContent=doc.nombre_archivo+" · previamente cargado";
+          // Marcar como "ya existe" para no exigirlo de nuevo si no se reemplaza
+          archivos[domId]={existente:true, docId:doc.id, nombre:doc.tipo};
+        }
+      });
+    },50);
+
+    // Botones según el caso.
+    // En un BORRADOR se conservan los dos: "Guardar borrador" para seguir
+    // trabajando después, y "Enviar factura" para mandarlo a Compras.
+    // En una factura ya Pendiente solo tiene sentido guardar cambios.
+    if(esBorrador){
+      document.getElementById("btn-borrador").style.display="";
+      document.getElementById("btn-borrador").textContent="Guardar borrador";
+      document.getElementById("btn-enviar").textContent="Enviar factura →";
+      const t=document.querySelector(".page-title");
+      if(t) t.textContent="Completar borrador";
+    }else{
+      document.getElementById("btn-enviar").textContent="Guardar cambios →";
+      document.getElementById("btn-borrador").style.display="none";
+    }
+    actualizarBotonEnviar();
+  }
+
+  async function loadCatalogos(){
+    // Proyecto y Responsable ahora son campos de texto libre — no requieren catálogo
+    // Prellenar Responsable con el usuario que inició sesión (editable)
+    document.getElementById("responsable").value=user.full_name;
+  }
+
+  // MONEDA
+  function setCurrency(c){
+    moneda=c;
+    const isMXN=c==="mxn";
+    document.getElementById("opt-mxn").className="currency-opt"+(isMXN?" sel-mxn":"");
+    document.getElementById("opt-usd").className="currency-opt"+(!isMXN?" sel-usd":"");
+    const cls=isMXN?"mxn":"usd";
+    ["pre-sin","pre-iva","pre-subtotal"].forEach(id=>{const el=document.getElementById(id);el.className="monto-pre "+cls;});
+    const badge=document.getElementById("cur-badge-header");
+    badge.className="cur-badge "+cls;
+    badge.textContent=isMXN?"🇲🇽 MXN":"🇺🇸 USD";
+    const info=document.getElementById("cur-info");
+    info.className="cur-info "+cls;
+    info.innerHTML=(isMXN?"🇲🇽":"🇺🇸")+" <strong>Moneda: "+(isMXN?"Pesos Mexicanos (MXN)":"Dólares (USD)")+"</strong>";
+    calcTotal();
+  }
+
+  let retencionesCount=0;
+
+  function agregarRetencion(valorInicial){
+    retencionesCount++;
+    const id="ret-"+retencionesCount;
+    const wrap=document.getElementById("retenciones-wrap");
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;gap:8px;align-items:center";
+    row.id="row-"+id;
+    row.innerHTML=`
+      <span style="font-size:12px;color:var(--text-dim);width:90px">Retención ${retencionesCount}</span>
+      <div class="monto-wrap" style="flex:1">
+        <span class="monto-pre ${moneda}" style="position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:700">$</span>
+        <input class="finput finput-monto" type="number" min="0" step="0.01" placeholder="0.00" id="${id}" oninput="calcTotal()" value="${valorInicial||''}"/>
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost" style="color:var(--red)" onclick="eliminarRetencion('row-${id}')">✕</button>
+    `;
+    wrap.appendChild(row);
+    calcTotal();
+  }
+
+  function eliminarRetencion(rowId){
+    document.getElementById(rowId)?.remove();
+    calcTotal();
+  }
+
+  function getRetenciones(){
+    const wrap=document.getElementById("retenciones-wrap");
+    const inputs=wrap.querySelectorAll("input[type=number]");
+    return Array.from(inputs).map(i=>parseFloat(i.value||0)).filter(v=>v>0);
+  }
+
+  // Redondeo a centavos consistente. Todos los renglones se redondean
+  // ANTES de sumarse, para que lo que se ve en pantalla sea exactamente
+  // lo que se guarda y lo que suma. Antes el IVA se mostraba redondeado
+  // pero el total usaba el valor sin redondear: diferencias de un centavo
+  // contra el CFDI, que en conciliación contable no cuadran.
+  const r2=n=>Math.round((Number(n)+Number.EPSILON)*100)/100;
+
+  function calcTotal(){
+    const sin=r2(parseFloat(document.getElementById("monto_sin_iva").value)||0);
+    const sel=document.getElementById("iva_tasa_sel");
+    let tasaPct=parseFloat(sel?sel.value:"16");
+    if(isNaN(tasaPct))tasaPct=16;
+    const tasa=tasaPct/100;
+    document.getElementById("label-iva").textContent="IVA ("+tasaPct+"%)";
+
+    // Aviso fiscal: el IVA depende del PROVEEDOR, no de la moneda.
+    // Un proveedor mexicano que factura en USD SÍ causa IVA. Lo que no
+    // causa IVA trasladado es el residente en el extranjero, que emite
+    // invoice en lugar de CFDI.
+    const hint=document.getElementById("iva-hint");
+    if(hint){
+      if(tasaPct===0){
+        hint.innerHTML="⚠️ Sin IVA trasladado. Aplica solo a operaciones exentas o con residentes en el extranjero (invoice, no CFDI). Si es proveedor mexicano, debe llevar IVA aunque facture en dólares.";
+        hint.style.color="var(--gold-light)";
+      }else if(tasaPct===8){
+        hint.textContent="Tasa de región fronteriza. Verifica que el CFDI la especifique así.";
+        hint.style.color="var(--text-dim)";
+      }else{
+        hint.textContent="";
+      }
+    }
+
+    const iva=r2(sin*tasa);
+    document.getElementById("iva_calculado").value=iva.toFixed(2);
+    const subtotal=r2(sin+iva);
+    document.getElementById("subtotal_con_iva").value=subtotal.toFixed(2);
+
+    const retenciones=getRetenciones().map(r2);
+    const totalRetenciones=r2(retenciones.reduce((a,b)=>a+b,0));
+    const totalFinal=r2(subtotal-totalRetenciones);
+
+    // Las retenciones no pueden superar el importe facturado: sería un
+    // total negativo, o sea que el proveedor le debería dinero a SkySense.
+    const alerta=document.getElementById("alerta-retenciones");
+    if(alerta){
+      if(totalRetenciones>subtotal&&subtotal>0){
+        alerta.style.display="block";
+        alerta.textContent="⚠️ Las retenciones ($"+totalRetenciones.toFixed(2)+") superan el importe con IVA ($"+subtotal.toFixed(2)+"). Revisa los montos.";
+      }else{
+        alerta.style.display="none";
+      }
+    }
+
+    document.getElementById("total").value=totalFinal.toFixed(2);
+    document.getElementById("total-final-display").textContent="$"+totalFinal.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+
+  // CONDICIONES
+  function chgCond(v){
+    ["15dias","30dias","45dias","contado"].forEach(x=>{
+      const el=document.getElementById("cb-"+x);if(el)el.classList.remove("show");
+    });
+    const map={"15 días":"15dias","30 días":"30dias","45 días":"45dias","Contado":"contado"};
+    if(map[v]){const el=document.getElementById("cb-"+map[v]);if(el)el.classList.add("show");}
+  }
+
+  // CONCEPTO → documentos dinámicos
+  // ── CATÁLOGOS DESDE CONFIGURACIÓN ───────────────────
+  // Conceptos y condiciones ya no están escritos en el código: se leen de
+  // la tabla `configuracion`. Lo que Ricardo agrega en Configuración
+  // aparece aquí sin tocar el HTML.
+  let CONCEPTOS=[], CONDICIONES=[];
+
+  async function cargarCatalogos(){
+    const {data,error}=await sb.from("configuracion").select("key,value")
+      .in("key",["conceptos","condiciones_pago"]);
+    const map={};
+    (data||[]).forEach(c=>{map[c.key]=c.value;});
+
+    CONCEPTOS=(map["conceptos"]||[]).map(c=>
+      typeof c==="string"?{nombre:c,docs:["factura_pdf","factura_xml"],anotaciones:false}:c);
+    CONDICIONES=(map["condiciones_pago"]||[]).map(c=>
+      typeof c==="string"?{nombre:c,dias:parseInt(c)||30}:c);
+
+    // Respaldo si Configuración está vacía o falló la consulta: el
+    // formulario nunca debe quedar sin opciones.
+    if(!CONCEPTOS.length){
+      CONCEPTOS=[
+        {nombre:"Entrega de Materiales",docs:["evidencia","factura_pdf","factura_xml"],anotaciones:false},
+        {nombre:"Anticipo",docs:["factura_pdf","factura_xml"],anotaciones:false},
+        {nombre:"Avance de Obra",docs:["estimacion","factura_pdf","factura_xml"],anotaciones:false}
+      ];
+      if(error) toast("No se pudo leer la configuración; se usan los conceptos por defecto","err");
+    }
+    if(!CONDICIONES.length){
+      CONDICIONES=[{nombre:"Contado",dias:3},{nombre:"15 días",dias:15},{nombre:"30 días",dias:30},{nombre:"45 días",dias:45}];
+    }
+
+    const selC=document.getElementById("concepto");
+    selC.innerHTML='<option value="">— Seleccionar —</option>'+
+      CONCEPTOS.map(c=>`<option>${c.nombre}</option>`).join("");
+    const selP=document.getElementById("condicion_pago");
+    selP.innerHTML='<option value="">— Seleccionar —</option>'+
+      CONDICIONES.map(c=>`<option>${c.nombre}</option>`).join("");
+  }
+
+  function chgConc(v){
+    const cfg=CONCEPTOS.find(c=>c.nombre===v);
+    const info=document.getElementById("cv-info");
+    if(cfg){
+      info.style.display="block";
+      info.classList.add("show");
+      document.getElementById("cv-info-title").textContent=v+" · Documentos";
+      document.getElementById("cv-info-docs").textContent=
+        (cfg.docs||[]).map(d=>(DOC_DEFS[d]?DOC_DEFS[d].nombre:d)).join(" · ");
+    }else{
+      info.style.display="none";
+      info.classList.remove("show");
+    }
+
+    // Campo de anotaciones: solo para los conceptos configurados así
+    const grp=document.getElementById("grp-anotaciones");
+    if(cfg&&cfg.anotaciones){
+      grp.style.display="block";
+      document.getElementById("label-anotaciones").textContent=cfg.label||"Anotaciones";
+    }else{
+      grp.style.display="none";
+      document.getElementById("anotaciones").value="";
+    }
+
+    renderDocs(v);
+    actualizarBotonEnviar();
+  }
+
+  // ── CATÁLOGO DE DOCUMENTOS ──────────────────────────
+  // Las descripciones viven aquí; qué documentos exige cada concepto
+  // viene de Configuración (tabla `configuracion`, key `conceptos`).
+  const DOC_DEFS={
+    evidencia:{nombre:"Evidencia",icon:"📸",desc:"Albarán, remisión o acuse de recibo · <strong style='color:var(--gold-light)'>debe estar firmado por personal de SkySense</strong> · PDF/Imagen · Máx 10MB"},
+    estimacion:{nombre:"Estimación",icon:"📋",desc:"Estimación · <strong style='color:var(--gold-light)'>debe estar firmada por personal de SkySense</strong> · PDF · Máx 10MB"},
+    factura_pdf:{nombre:"Factura PDF",icon:"📄",desc:"CFDI en formato PDF · Máx 10MB"},
+    factura_xml:{nombre:"Factura XML",icon:"🗂",desc:"CFDI timbrado por el SAT · XML · Máx 2MB"}
+  };
+
+  function docsDelConcepto(concepto){
+    const cfg=CONCEPTOS.find(c=>c.nombre===concepto);
+    return (cfg&&cfg.docs?cfg.docs:[]).map(id=>({id,...(DOC_DEFS[id]||{nombre:id,icon:"📎",desc:""})}));
+  }
+
+  function renderDocs(concepto){
+    const label=document.getElementById("docs-concepto-label");
+    const body=document.getElementById("docs-body");
+    if(!concepto){
+      label.textContent="selecciona un concepto arriba";
+      body.innerHTML=`<div class="docs-alert info">ℹ Selecciona el concepto en el Paso 3 para ver los documentos requeridos.</div>`;
+      archivos={};
+      actualizarBotonEnviar();
+      return;
+    }
+    label.textContent=concepto;
+    const docs=docsDelConcepto(concepto);
+    const necesitaFirma=docs.some(d=>d.id==="evidencia"||d.id==="estimacion");
+    const nombres=docs.map(d=>d.nombre).join(" + ");
+    const alertMsg=necesitaFirma
+      ? `⚠ Requeridos: ${nombres} — el documento de respaldo debe venir firmado por personal de SkySense`
+      : `ℹ Requeridos: ${nombres}`;
+    const gridCls=docs.length===2?"d2":(docs.length===1?"d2":"d3");
+    body.innerHTML=`
+      <div class="docs-alert ${necesitaFirma?"warn":"info"}">${alertMsg}</div>
+      <div class="docs-grid ${gridCls}">
+        ${docs.map(d=>`
+          <div class="doc-item">
+            <div class="doc-tag req" id="tag-${d.id}">${d.icon} ${d.nombre} *</div>
+            <div class="upload-zone" id="zone-${d.id}" onclick="document.getElementById('file-${d.id}').click()">
+              <div class="uz-icon">${d.icon}</div>
+              <div class="uz-text" id="utext-${d.id}">Haz clic para seleccionar</div>
+              <div class="uz-hint">${d.desc}</div>
+              <input type="file" id="file-${d.id}" style="display:none"
+                accept="${d.id==="factura_xml"?".xml":".pdf,.jpg,.jpeg,.png"}"
+                onchange="handleFile(event,'${d.id}','${d.nombre}')"/>
+            </div>
+          </div>
+        `).join("")}
+      </div>`;
+    archivos={};
+    actualizarBotonEnviar();
+  }
+
+  // ── CONTROL DEL BOTÓN "ENVIAR FACTURA" ──────────────
+  // Se deshabilita mientras falten documentos. Antes se podía pulsar y
+  // solo salía un toast de error; ahora el estado del botón comunica la
+  // regla por sí solo, y "Guardar borrador" queda como la salida válida.
+  function actualizarBotonEnviar(){
+    const btn=document.getElementById("btn-enviar");
+    if(!btn)return;
+    const concepto=document.getElementById("concepto").value;
+    const requeridos=docsDelConcepto(concepto).map(d=>d.id);
+    const faltantes=requeridos.filter(r=>!archivos[r]);
+    // Al editar una factura ya Pendiente los documentos ya se validaron
+    // en su momento, así que no se vuelve a bloquear el botón.
+    const listo=(editMode&&!esBorrador)?true:(concepto&&requeridos.length>0&&faltantes.length===0);
+
+    btn.disabled=!listo;
+    btn.style.opacity=listo?"1":".45";
+    btn.style.cursor=listo?"pointer":"not-allowed";
+    btn.title=listo?"":"Faltan documentos por adjuntar";
+    btn.textContent=(editMode&&!esBorrador)?"Guardar cambios →":(listo?"Enviar factura →":`Faltan ${faltantes.length} documento(s)`);
+
+    const aviso=document.getElementById("aviso-envio");
+    if(aviso){
+      if(!concepto){
+        aviso.textContent="Selecciona un concepto para ver qué documentos se requieren.";
+        aviso.style.display="block";
+      }else if(faltantes.length){
+        aviso.innerHTML=`Faltan: <strong>${faltantes.map(f=>DOC_DEFS[f]?DOC_DEFS[f].nombre:f).join(", ")}</strong>. Puedes guardar un borrador y completarlo después: no llega a Compras hasta que lo envíes.`;
+        aviso.style.display="block";
+      }else{
+        aviso.style.display="none";
+      }
+    }
+  }
+
+  // ── NOMBRES SEGUROS PARA STORAGE ────────────────────
+  // Supabase Storage rechaza acentos, ñ y varios símbolos en la ruta:
+  // devuelve "Invalid key". En México casi todo archivo trae acentos
+  // ("CERTIFICACIÓN", "ÁLAMO"), así que hay que normalizar SIEMPRE.
+  // El nombre original se conserva en documentos.nombre_archivo para
+  // mostrarlo tal cual al usuario; solo la ruta física se sanea.
+  function nombreSeguro(nombre){
+    return nombre
+      .normalize("NFD").replace(/[\u0300-\u036f]/g,"")  // quita acentos
+      .replace(/ñ/g,"n").replace(/Ñ/g,"N")
+      .replace(/[^a-zA-Z0-9._-]/g,"_")                  // resto → guion bajo
+      .replace(/_+/g,"_")
+      .slice(-120);                                      // límite de longitud
+  }
+
+  function handleFile(event,docId,docNombre){
+    const file=event.target.files[0];
+    if(!file)return;
+    const maxSize=docId==="factura_xml"?2*1024*1024:10*1024*1024;
+    if(file.size>maxSize){toast(`${docNombre}: el archivo supera el límite de tamaño`,"err");return;}
+    archivos[docId]={file,nombre:docNombre};
+    const zone=document.getElementById("zone-"+docId);
+    const tag=document.getElementById("tag-"+docId);
+    const txt=document.getElementById("utext-"+docId);
+    zone.classList.add("uploaded");
+    tag.className="doc-tag done";
+    tag.textContent="✓ "+docNombre;
+    txt.textContent=file.name+" · "+formatSize(file.size);
+    toast(docNombre+" seleccionado ✓","ok");
+    actualizarBotonEnviar();
+  }
+
+  // VALIDACIONES
+  function validateField(el){
+    const ok=el.value.trim().length>0;
+    el.classList.toggle("error",!ok);
+    const err=document.getElementById("err-"+el.id.replace("_","-").replace("_","-"));
+    if(err)err.classList.toggle("show",!ok);
+    return ok;
+  }
+
+  function validateUUID(el){
+    const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const ok=uuid.test(el.value.trim());
+    el.classList.toggle("error",el.value.length>0&&!ok);
+    document.getElementById("err-folio").classList.toggle("show",el.value.length>0&&!ok);
+    return ok||el.value.trim().length===0;
+  }
+
+  function validarFormulario(){
+    let ok=true;
+    if(!document.getElementById("razon_social").value.trim()){document.getElementById("razon_social").classList.add("error");document.getElementById("err-razon").classList.add("show");ok=false;}
+    if(!document.getElementById("fecha_factura").value){document.getElementById("fecha_factura").classList.add("error");document.getElementById("err-fecha").classList.add("show");ok=false;}
+    if(!document.getElementById("folio_fiscal").value.trim()){document.getElementById("folio_fiscal").classList.add("error");document.getElementById("err-folio").classList.add("show");ok=false;}
+    if(!document.getElementById("orden_compra").value.trim()){document.getElementById("orden_compra").classList.add("error");document.getElementById("err-orden").classList.add("show");ok=false;}
+    if(!document.getElementById("proyecto").value.trim()){document.getElementById("proyecto").classList.add("error");document.getElementById("err-proyecto").classList.add("show");ok=false;}
+    // Responsable es opcional — se prellena con el usuario logueado
+    if(!document.getElementById("monto_sin_iva").value||parseFloat(document.getElementById("monto_sin_iva").value)<=0){document.getElementById("err-monto").classList.add("show");ok=false;}
+    // El total ahora se calcula automáticamente, no requiere validación manual
+    if(!document.getElementById("condicion_pago").value){document.getElementById("err-condicion").classList.add("show");ok=false;}
+    if(!document.getElementById("concepto").value){document.getElementById("err-concepto").classList.add("show");ok=false;}
+    return ok;
+  }
+
+  // GUARDAR EN SUPABASE
+  async function guardarBorrador(){
+    // El borrador NO consume folio y NO es visible para Compras.
+    // El proveedor puede completarlo después sin perder la captura.
+    await guardar(false);
+  }
+
+  async function enviarFactura(){
+    if(!validarFormulario()){toast("Completa todos los campos requeridos","err");return;}
+    const concepto=document.getElementById("concepto").value;
+    const docsReq={"Entrega de Materiales":["evidencia","factura_pdf","factura_xml"],"Anticipo":["factura_pdf","factura_xml"],"Avance de Obra":["estimacion","factura_pdf","factura_xml"]};
+    const requeridos=docsReq[concepto]||[];
+    const faltantes=requeridos.filter(r=>!archivos[r]);
+    if(faltantes.length>0){toast("Faltan documentos: "+faltantes.map(f=>f.replace("_"," ")).join(", "),"err");return;}
+    await guardar(true);
+  }
+
+  async function guardar(submit){
+    const btn=document.getElementById(submit?"btn-enviar":"btn-borrador");
+    btn.disabled=true;
+    btn.textContent=editMode?"Guardando cambios…":(submit?"Enviando…":"Guardando…");
+    try{
+      const condVal=document.getElementById("condicion_pago").value;
+
+      // Saneamiento de tipos antes de enviar a Postgres.
+      // Al guardar como BORRADOR no corren las validaciones, así que los
+      // campos vacíos llegaban como "" y Postgres los rechazaba con
+      // "invalid input syntax for type date". Un campo vacío debe viajar
+      // como null (ausencia de dato), no como cadena vacía.
+      const txt=id=>{const el=document.getElementById(id);const v=el?String(el.value||"").trim():"";return v===""?null:v;};
+      const num=id=>{const el=document.getElementById(id);const v=parseFloat(el?el.value:"");return isNaN(v)?null:v;};
+
+      const tasaIva=num("iva_tasa_sel");
+
+      const payload={
+        razon_social:txt("razon_social"),
+        fecha_factura:txt("fecha_factura"),
+        orden_compra:txt("orden_compra"),
+        folio_fiscal:txt("folio_fiscal"),
+        proyecto:txt("proyecto"),
+        responsable:txt("responsable")||user.full_name,
+        moneda:moneda.toUpperCase(),
+        monto_sin_iva:num("monto_sin_iva"),
+        iva_tasa:tasaIva!=null?tasaIva:16,
+        es_extranjera:tasaIva===0,
+        iva_monto:num("iva_calculado")||0,
+        retenciones:getRetenciones(),
+        total_retenciones:getRetenciones().reduce((a,b)=>a+b,0),
+        total:num("total"),
+        condicion_pago:condVal||null,
+        banco_receptor:txt("banco_receptor"),
+        concepto:document.getElementById("concepto").value||null,
+        anotaciones:txt("anotaciones")
+      };
+
+      let fac;
+      if(editMode){
+        // ── ACTUALIZAR FACTURA EXISTENTE ──
+        // Si es un borrador y el usuario pulsa "Enviar", pasa a Pendiente:
+        // ahí entra a la cola de Compras y el trigger le asigna su folio.
+        if(esBorrador && submit) payload.status="Pendiente";
+        const {data,error:facErr}=await sb.from("facturas").update(payload).eq("id",facturaId).select("id,numero,status").single();
+        if(facErr)throw facErr;
+        fac=data;
+        await sb.from("audit_log").insert({user_id:user.id,user_role:user.role,action:"EDIT",entity:"factura",entity_id:fac.id,detail:{numero:fac.numero,accion:"edicion_datos"}});
+      }else{
+        // ── CREAR FACTURA NUEVA ──
+        payload.proveedor_id=user.id;
+        // Solo al enviar entra a la cola de Compras y recibe folio
+        payload.status=submit?"Pendiente":"Borrador";
+        const {data,error:facErr}=await sb.from("facturas").insert(payload).select("id,numero").single();
+        if(facErr)throw facErr;
+        fac=data;
+        facturaId=fac.id;
+        await sb.from("audit_log").insert({user_id:user.id,user_role:user.role,action:"CREATE",entity:"factura",entity_id:fac.id,detail:{numero:fac.numero,concepto:payload.concepto,moneda:payload.moneda}});
+
+        // Notificar a Compras y Ricardo (fire-and-forget, no bloquea la UI)
+        fetch(`${SURL}/functions/v1/notify-new-invoice`,{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            numero:fac.numero, razon_social:payload.razon_social,
+            concepto:payload.concepto, moneda:payload.moneda,
+            total:payload.total, condicion_pago:payload.condicion_pago
+          })
+        }).catch(()=>{});
+      }
+
+      // Subir SOLO archivos nuevos (los que tienen .file, no los marcados como existente)
+      // SUBIDA ATÓMICA: se lleva registro de lo subido. Si algo falla a
+      // media lista, se borran los archivos ya cargados para no dejar
+      // huérfanos en Storage consumiendo espacio sin que nada los
+      // referencie (fue el origen de los 11 archivos basura que tuvimos).
+      const archivosNuevos=Object.entries(archivos).filter(([_,v])=>v.file);
+      const subidos=[];
+      try{
+        for(let i=0;i<archivosNuevos.length;i++){
+          const [docId,{file,nombre}]=archivosNuevos[i];
+          const path=`${user.id}/${fac.id}/${docId}_${Date.now()}_${nombreSeguro(file.name)}`;
+          const {error:upErr}=await sb.storage.from("documentos-facturas").upload(path,file);
+          if(upErr)throw upErr;
+          subidos.push(path);
+          const {error:docErr}=await sb.from("documentos").insert({factura_id:fac.id,tipo:nombre,nombre_archivo:file.name,storage_path:path,size_bytes:file.size,uploaded_by:user.id});
+          if(docErr)throw docErr;
+        }
+      }catch(errDoc){
+        if(subidos.length){
+          await sb.storage.from("documentos-facturas").remove(subidos).catch(()=>{});
+        }
+        // La factura YA quedó creada; solo fallaron los documentos.
+        // Pasamos a modo edición para que el reintento ACTUALICE esa
+        // factura en lugar de insertar otra con el mismo folio fiscal
+        // (eso disparaba "duplicate key idx_facturas_folio_unico" y dejaba
+        // al usuario atorado sin entender por qué).
+        if(!editMode){
+          editMode=true;
+          editFactura=fac;
+          facturaId=fac.id;
+          document.getElementById("btn-borrador").style.display="none";
+        }
+        throw new Error("No se pudieron guardar los documentos: "+(errDoc.message||errDoc));
+      }
+
+      let msg;
+      if(editMode && esBorrador && submit)      msg=`Factura ${fac.numero} enviada exitosamente ✓`;
+      else if(editMode && esBorrador)           msg="Borrador actualizado ✓";
+      else if(editMode)                          msg=`Factura ${fac.numero} actualizada ✓`;
+      else if(submit)                            msg=`Factura ${fac.numero} enviada exitosamente ✓`;
+      else                                       msg="Borrador guardado ✓ — no llega a Compras hasta que lo envíes";
+      toast(msg,"ok");
+      setTimeout(()=>go(user.role==="proveedor"?"skysense_portal_proveedor.html":"skysense_portal_dashboard.html"),1500);
+    }catch(err){
+      toast(mensajeAmable(err.message||String(err)),"err");
+      btn.disabled=false;
+      btn.textContent=editMode?"Guardar cambios →":(submit?"Enviar factura →":"Guardar borrador");
+    }
+  }
+
+  // Traduce errores técnicos a instrucciones que el usuario pueda seguir.
+  // Un proveedor no debe leer "duplicate key value violates unique
+  // constraint" y quedarse sin saber qué hacer.
+  function mensajeAmable(msg){
+    const m=String(msg);
+    if(m.includes("idx_facturas_folio_unico")||m.includes("folio_fiscal"))
+      return "Este folio fiscal (UUID) ya está registrado en el portal. Revisa si la factura ya fue capturada antes.";
+    if(m.includes("facturas_numero_key"))
+      return "Hubo un choque al asignar el número de factura. Vuelve a intentarlo; si persiste, avisa a Compras.";
+    if(m.includes("Invalid key"))
+      return "El nombre del archivo tiene caracteres no permitidos. Vuelve a seleccionarlo: el sistema ya lo corrige automáticamente.";
+    if(m.includes("facturas_concepto_check")||m.includes("concepto_check"))
+      return "Este concepto aún no está habilitado en la base de datos. Avisa a Compras: es un ajuste de configuración, no un error tuyo. Mientras tanto puedes guardar como borrador.";
+    if(m.includes("condicion_pago_check"))
+      return "Esta condición de pago aún no está habilitada en la base de datos. Avisa a Compras. Mientras tanto puedes guardar como borrador.";
+    if(m.includes("chk_status_facturas"))
+      return "Hubo un problema con el estado de la factura. Vuelve a intentarlo; si persiste, avisa a Compras.";
+    if(m.includes("violates check constraint"))
+      return "Uno de los valores seleccionados no está habilitado en la base de datos. Avisa a Compras con el nombre del concepto o la condición de pago que elegiste.";
+    if(m.includes("row-level security")||m.includes("permission denied"))
+      return "No tienes permiso para esta acción. Si crees que es un error, avisa a Compras.";
+    if(m.includes("invalid input syntax for type date"))
+      return "Revisa las fechas: hay un campo de fecha vacío o con formato incorrecto.";
+    if(m.includes("Failed to fetch")||m.includes("NetworkError"))
+      return "Se perdió la conexión. Revisa tu internet y vuelve a intentarlo.";
+    return "Error: "+m;
+  }
+
+  async function logout(){await sb.auth.signOut();go("index.html");}
+  function go(url){window.location.href=url;}
+  function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):"";}
+  function formatSize(b){return b>1024*1024?(b/1024/1024).toFixed(1)+"MB":(b/1024).toFixed(0)+"KB";}
+  function toast(msg,type="ok"){
+    const t=document.getElementById("toast");t.textContent=msg;t.className=`toast ${type} show`;
+    setTimeout(()=>t.classList.remove("show"),3500);
+    if(type==="err"&&typeof user!=="undefined"&&user){
+      sb.from("audit_log").insert({user_id:user.id,user_role:user.role,action:"ERROR",entity:"sistema",detail:{mensaje:msg,pagina:location.pathname.split("/").pop()}}).then(()=>{}).catch(()=>{});
+    }
+  }
+</script>
+<script>
+/* AUTO-ACTUALIZACIÓN AUTOMÁTICA
+   PARA PUBLICAR: sube este número Y el de version.json al MISMO valor,
+   y sube ambos archivos juntos. Si no coinciden, el aviso se repite en bucle.
+
+   Comportamiento: si no hay datos sin guardar, la página se actualiza SOLA,
+   en silencio. Solo cuando el usuario está capturando algo se le pregunta,
+   para no borrarle el trabajo a medias. */
+(function(){
+  const VERSION_CARGADA = "2026.08.21-1";
+  const INTERVALO_MS = 60000;
+  const CLAVE_INTENTO = "sky_intento_actualizar";
+  let barra = null, versionPendiente = null;
+
+  // ¿Hay trabajo sin guardar? Recargar en ese momento borraría la captura.
+  function hayTrabajoEnCurso(){
+    // Modal o panel abierto
+    if(document.querySelector(".overlay.show, .modal.show")) return true;
+    // Algún campo con contenido escrito por el usuario
+    const campos = document.querySelectorAll("input, textarea, select");
+    for(const c of campos){
+      if(c.type === "hidden" || c.disabled || c.readOnly) continue;
+      if(c.offsetParent === null) continue;              // no visible
+      if(c.id && /^(srch|global-search|filtro|f-)/.test(c.id)) continue;  // búsquedas y filtros no cuentan
+      if(c.tagName === "SELECT"){ if(c.selectedIndex > 0) return true; continue; }
+      if(c.type === "file"){ if(c.files && c.files.length) return true; continue; }
+      if(c.type === "checkbox" || c.type === "radio"){ if(c.checked) return true; continue; }
+      if(String(c.value || "").trim() !== "") return true;
+    }
+    return false;
+  }
+
+  function aplicarActualizacion(versionNueva){
+    try{ sessionStorage.setItem(CLAVE_INTENTO, versionNueva); }catch(e){}
+    const recargar = () => location.replace(location.pathname + "?v=" + Date.now() + location.hash);
+    if(window.caches){
+      caches.keys().then(ll => Promise.all(ll.map(k => caches.delete(k)))).then(recargar).catch(recargar);
+    }else{
+      recargar();
+    }
+  }
+
+  async function revisarVersion(){
+    if(barra) return;
+    try{
+      const r = await fetch("version.json?t=" + Date.now(), {cache:"no-store"});
+      if(!r.ok) return;
+      const data = await r.json();
+      if(!data.version || data.version === VERSION_CARGADA) return;
+
+      // Si ya intentamos llegar a esta versión y el archivo sigue siendo el
+      // viejo, el despliegue está incompleto: se subió version.json pero no
+      // los HTML. Reintentar sería un bucle de recargas.
+      let yaIntentado = null;
+      try{ yaIntentado = sessionStorage.getItem(CLAVE_INTENTO); }catch(e){}
+      if(yaIntentado === data.version){
+        console.warn("[SkySense] version.json indica " + data.version +
+          " pero este archivo sigue en " + VERSION_CARGADA +
+          ". Falta publicar los HTML actualizados.");
+        return;
+      }
+
+      versionPendiente = data.version;
+
+      if(!hayTrabajoEnCurso()){
+        aplicarActualizacion(data.version);   // silencioso
+        return;
+      }
+      mostrarAviso();                          // hay captura en curso: preguntar
+    }catch(e){}
+  }
+
+  function mostrarAviso(){
+    barra = document.createElement("div");
+    barra.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:99999;"+
+      "display:flex;align-items:center;gap:16px;padding:13px 18px;border-radius:12px;background:#1B4B8A;color:#fff;"+
+      "box-shadow:0 8px 28px rgba(0,0,0,.35);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:13px;"+
+      "max-width:calc(100vw - 32px)";
+    barra.innerHTML =
+      '<strong>Nueva versión disponible</strong>'+
+      '<button id="btn-actualizar-ver" style="background:#fff;color:#1B4B8A;border:0;padding:8px 16px;border-radius:8px;'+
+      'font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">Actualizar</button>'+
+      '<button id="btn-luego-ver" style="background:transparent;color:rgba(255,255,255,.65);border:0;font-size:11px;'+
+      'cursor:pointer;white-space:nowrap">Luego</button>';
+    document.body.appendChild(barra);
+
+    document.getElementById("btn-actualizar-ver").onclick = function(){
+      this.textContent = "Actualizando…";
+      this.disabled = true;
+      aplicarActualizacion(versionPendiente);
+    };
+    document.getElementById("btn-luego-ver").onclick = function(){
+      barra.remove(); barra = null;
+      setTimeout(revisarVersion, 300000);
+    };
+  }
+
+  revisarVersion();
+  setInterval(revisarVersion, INTERVALO_MS);
+  // Al volver a la pestaña suele ser el mejor momento: nada a medio escribir
+  document.addEventListener("visibilitychange", function(){ if(!document.hidden) revisarVersion(); });
+})();
+</script>
+<script src="asistente.js"></script>
+</body>
+</html>
