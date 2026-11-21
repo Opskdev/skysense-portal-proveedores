@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SkySense — Clasificación y conciliación con CFDI</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{--deep:#0A1628;--surface:#111E33;--surface3:#0C1A2E;--border:rgba(45,125,210,.2);--border2:rgba(45,125,210,.12);
+      --text:#E8F0FE;--muted:#7A9CC4;--dim:#4A6A8A;--accent:#2D7DD2;--mxn:#5BA4F5;--usd:#22D3EE;
+      --green:#34D399;--yellow:#FCD34D;--red:#F87171}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--deep);color:var(--text);min-height:100vh}
+    .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 60px}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;gap:16px}
+    h1{font-size:19px;font-weight:700}
+    .sub{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.6}
+    .card{background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+    .h{font-size:13px;font-weight:700;margin-bottom:12px}
+    .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);font-weight:600;margin-bottom:6px}
+    .big{font-size:22px;font-weight:700}
+    .grid{display:grid;gap:12px}
+    .btn{padding:9px 18px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit}
+    .btn-accent{background:var(--accent);color:#fff}
+    .btn-green{background:#059669;color:#fff}
+    .btn-ghost{background:var(--surface3);color:var(--muted);border:1px solid var(--border)}
+    .btn:disabled{opacity:.4;cursor:not-allowed}
+    .row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap}
+    .bar{height:6px;background:#1E2E4A;border-radius:3px;overflow:hidden;margin-top:10px}
+    .bar>div{height:100%;background:var(--accent);width:0;transition:width .2s}
+    .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
+    .cur{font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;margin-right:6px;vertical-align:2px}
+    .cm{background:rgba(91,164,245,.15);color:var(--mxn)}.cu{background:rgba(34,211,238,.15);color:var(--usd)}
+    .ln{font-size:14px;font-weight:700;line-height:1.7}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);text-align:left;padding:8px 10px;border-bottom:1px solid var(--border2)}
+    td{padding:8px 10px;border-bottom:1px solid rgba(45,125,210,.07);vertical-align:top}
+    .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
+    .r{text-align:right}
+    .pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(255,255,255,.05);white-space:nowrap}
+    .msg{font-size:12px;padding:10px 14px;border-radius:8px;margin-top:12px;line-height:1.6}
+    .msg.ok{background:rgba(52,211,153,.1);color:var(--green)}
+    .msg.warn{background:rgba(252,211,77,.1);color:var(--yellow)}
+    .msg.err{background:rgba(248,113,113,.1);color:var(--red)}
+    .empty{font-size:12px;color:var(--muted);padding:6px 0}
+    .scroll{max-height:420px;overflow:auto}
+    .hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <h1>Clasificación y conciliación de facturas con CFDI</h1>
+      <div class="sub">Identifica la razón social receptora de cada factura a partir del RFC del receptor en su CFDI.<br>
+      El análisis es de solo lectura. La clasificación se registra únicamente al confirmar.</div>
+    </div>
+    <button class="btn btn-ghost" onclick="location.href='skysense_portal_dashboard.html'">Volver al Dashboard</button>
+  </div>
+
+  <div class="card" id="panel-acciones">
+    <div class="row">
+      <div>
+        <div class="h" style="margin-bottom:4px">Estado</div>
+        <div class="sub" id="estado">Verificando sesión…</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-accent" id="btn-analizar" disabled onclick="analizar()">Analizar facturas</button>
+        <button class="btn btn-green"  id="btn-aplicar"  disabled onclick="aplicar()">Aplicar clasificación</button>
+        <button class="btn btn-ghost"  id="btn-exportar" disabled onclick="exportar()">Exportar reporte</button>
+      </div>
+    </div>
+    <div class="bar"><div id="progreso"></div></div>
+    <div id="mensaje"></div>
+  </div>
+
+  <div id="resultados" class="hide">
+    <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="kpis"></div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px" id="entidades"></div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:12px;align-items:flex-start">
+        <div>
+          <div class="h" style="margin-bottom:4px">Discrepancias entre lo registrado y el CFDI</div>
+          <div class="sub">Se preseleccionan las diferencias menores de captura. Las de moneda o de montos mayores requieren revisión antes de corregirse.</div>
+        </div>
+        <button class="btn btn-accent" id="btn-corregir" disabled onclick="corregirSeleccionadas()">Corregir seleccionadas con el CFDI</button>
+      </div>
+      <div class="scroll" id="tabla-discrepancias"></div>
+    </div>
+
+    <div class="card">
+      <div class="h">Facturas que requieren revisión</div>
+      <div class="sub" style="margin:-6px 0 12px">Sin XML registrado, con error de descarga, con formato no válido o emitidas a un receptor fuera del catálogo. Las de error de descarga se resuelven repitiendo el análisis.</div>
+      <div class="scroll" id="tabla-excepciones"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const SURL='https://vczbnaueqgedssdnylqo.supabase.co';
+  const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjemJuYXVlcWdlZHNzZG55bHFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NjYyMDMsImV4cCI6MjEwMDI0MjIwM30.7BCJmopnWhDcYxWHZUALnvJmhnSnxiucpO2CRxNOiF8';
+  const sb=supabase.createClient(SURL,SKEY);
+
+  const BUCKET='documentos-facturas';
+  const RFC_RE=/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+  const TOLERANCIA=0.05;
+
+  let entidades={};
+  let resultados=[];
+  let analizado=false;
+
+  const $=id=>document.getElementById(id);
+  const fmt=n=>Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function setEstado(t){ $('estado').textContent=t; }
+  function setProgreso(p){ $('progreso').style.width=Math.round(p*100)+'%'; }
+  function mensaje(tipo,html){ $('mensaje').innerHTML=html?`<div class="msg ${tipo}">${html}</div>`:''; }
+
+  async function enParalelo(items,limite,fn,alAvanzar){
+    let i=0,hechos=0;
+    const trabajadores=Array.from({length:Math.min(limite,items.length)},async()=>{
+      while(i<items.length){
+        const idx=i++;
+        await fn(items[idx],idx);
+        hechos++; if(alAvanzar) alAvanzar(hechos/items.length);
+      }
+    });
+    await Promise.all(trabajadores);
+  }
+
+  async function leerTodo(construir){
+    const tam=1000; let desde=0, todo=[];
+    while(true){
+      const {data,error}=await construir().range(desde,desde+tam-1);
+      if(error) throw error;
+      todo=todo.concat(data||[]);
+      if(!data||data.length<tam) break;
+      desde+=tam;
+    }
+    return todo;
+  }
+
+  (async()=>{
+    try{
+      const {data:{session}}=await sb.auth.getSession();
+      if(!session){ location.href='index.html'; return; }
+      const {data:p}=await sb.from('profiles').select('role,is_active,full_name').eq('id',session.user.id).single();
+      if(!p||!p.is_active||p.role!=='admin'){
+        setEstado('Acceso restringido al rol Administrador.');
+        return;
+      }
+      const {data:ents,error}=await sb.from('entidades_receptoras').select('rfc,nombre,color,activa').order('orden');
+      if(error) throw error;
+      (ents||[]).forEach(e=>entidades[e.rfc]=e);
+      if(!Object.keys(entidades).length){
+        setEstado('El catálogo de entidades receptoras está vacío. Ejecute primero el script 24.');
+        return;
+      }
+      setEstado('Listo para analizar. Entidades en catálogo: '+Object.values(entidades).map(e=>e.nombre).join(', ')+'.');
+      $('btn-analizar').disabled=false;
+    }catch(err){
+      setEstado('No fue posible iniciar la herramienta.');
+      mensaje('err',esc(err.message||err));
+    }
+  })();
+
+  function leerCFDI(texto){
+    const doc=new DOMParser().parseFromString(texto.replace(/^\uFEFF/,''),'application/xml');
+    if(doc.querySelector('parsererror')) throw new Error('XML no válido');
+    const comp=doc.documentElement;
+    if(!/Comprobante/i.test(comp.localName)) throw new Error('El archivo no es un CFDI');
+    const uno=tag=>comp.getElementsByTagNameNS('*',tag)[0]||null;
+    const emisor=uno('Emisor'), receptor=uno('Receptor'), tfd=uno('TimbreFiscalDigital');
+    const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;};
+
+    const imp=Array.from(comp.children).find(c=>/Impuestos$/i.test(c.localName))||null;
+    let ivaTasa=null, ivaMonto=0, retenciones=[];
+    if(imp){
+      ivaMonto=num(imp.getAttribute('TotalImpuestosTrasladados'));
+      const tras=Array.from(imp.getElementsByTagNameNS('*','Traslado')).filter(t=>t.getAttribute('Impuesto')==='002');
+      if(tras.length) ivaTasa=Math.round(num(tras[0].getAttribute('TasaOCuota'))*100);
+      retenciones=Array.from(imp.getElementsByTagNameNS('*','Retencion')).map(r=>num(r.getAttribute('Importe'))).filter(v=>v>0);
+      if(!retenciones.length){ const tr=num(imp.getAttribute('TotalImpuestosRetenidos')); if(tr>0) retenciones=[tr]; }
+    }
+    return {
+      subtotal:num(comp.getAttribute('SubTotal')),
+      descuento:num(comp.getAttribute('Descuento')),
+      tipoCambio:num(comp.getAttribute('TipoCambio')),
+      ivaTasa, ivaMonto, retenciones,
+      receptorRfc:(receptor&&receptor.getAttribute('Rfc')||'').trim().toUpperCase(),
+      receptorNom:receptor&&receptor.getAttribute('Nombre')||'',
+      emisorRfc:(emisor&&emisor.getAttribute('Rfc')||'').trim().toUpperCase(),
+      uuid:(tfd&&tfd.getAttribute('UUID')||'').trim().toUpperCase(),
+      total:parseFloat(comp.getAttribute('Total')||'0')||0,
+      moneda:(comp.getAttribute('Moneda')||'MXN').trim().toUpperCase()
+    };
+  }
+
+  async function descargarConReintentos(ruta,intentos=4){
+    let ultimo;
+    for(let i=0;i<intentos;i++){
+      try{
+        const {data:blob,error}=await sb.storage.from(BUCKET).download(ruta);
+        if(error) throw error;
+        return await blob.text();
+      }catch(err){
+        ultimo=err;
+        if(/not found|no existe/i.test(err.message||'')) break;
+        await new Promise(res=>setTimeout(res,800*Math.pow(2,i)));
+      }
+    }
+    throw ultimo;
+  }
+
+  async function analizar(){
+    $('btn-analizar').disabled=true; $('btn-aplicar').disabled=true; $('btn-exportar').disabled=true;
+    mensaje('',''); setProgreso(0); resultados=[];
+    try{
+      setEstado('Consultando facturas…');
+      const facturas=await leerTodo(()=>sb.from('facturas')
+        .select('id,numero,razon_social,folio_fiscal,total,moneda,status,receptor_rfc,receptor_origen,monto_sin_iva,iva_tasa,iva_monto,retenciones,total_retenciones,tipo_cambio')
+        .neq('status','Borrador').order('created_at'));
+
+      setEstado('Consultando documentos XML…');
+      const docs=await leerTodo(()=>sb.from('documentos')
+        .select('factura_id,storage_path,nombre_archivo,created_at,deleted,tipo')
+        .ilike('tipo','%xml%').order('created_at'));
+
+      const xmlPorFactura={};
+      docs.filter(d=>d.deleted!==true).forEach(d=>{ xmlPorFactura[d.factura_id]=d; });
+
+      setEstado('Leyendo '+facturas.length+' CFDI…');
+      await enParalelo(facturas,3,async f=>{
+        const r={id:f.id,numero:f.numero,razon_social:f.razon_social,moneda:f.moneda,total:Number(f.total||0),
+                 status:f.status,receptor_actual:f.receptor_rfc,origen_actual:f.receptor_origen,
+                 estado:null,receptor:null,emisor:null,discrepancias:[]};
+        const doc=xmlPorFactura[f.id];
+        if(!doc){ r.estado='sin_xml'; resultados.push(r); return; }
+        let texto;
+        try{
+          texto=await descargarConReintentos(doc.storage_path);
+        }catch(err){
+          r.estado='error_descarga'; r.error=err.message||String(err);
+          resultados.push(r); return;
+        }
+        try{
+          const x=leerCFDI(texto);
+          r.receptor=x.receptorRfc; r.receptor_nombre=x.receptorNom;
+          r.cfdi=x; r.reg=f;
+          r.emisor=RFC_RE.test(x.emisorRfc)?x.emisorRfc:null;
+          r.estado=entidades[x.receptorRfc]?'clasificable':'no_autorizado';
+
+          const ff=(f.folio_fiscal||'').trim().toUpperCase();
+          if(!ff) r.discrepancias.push({campo:'Folio fiscal',registrado:'Sin capturar',cfdi:x.uuid});
+          else if(x.uuid && ff!==x.uuid) r.discrepancias.push({campo:'Folio fiscal',registrado:ff,cfdi:x.uuid});
+          if(Math.abs(Number(f.total||0)-x.total)>TOLERANCIA)
+            r.discrepancias.push({campo:'Total',registrado:'$'+fmt(f.total),cfdi:'$'+fmt(x.total)});
+          if((f.moneda||'').toUpperCase()!==x.moneda && x.moneda!=='XXX')
+            r.discrepancias.push({campo:'Moneda',registrado:f.moneda||'—',cfdi:x.moneda});
+          if(x.emisorRfc && !r.emisor)
+            r.discrepancias.push({campo:'RFC emisor',registrado:'—',cfdi:x.emisorRfc+' (formato no válido)'});
+        }catch(err){
+          r.estado='error_lectura'; r.error=err.message||String(err);
+        }
+        resultados.push(r);
+      },setProgreso);
+
+      resultados.sort((a,b)=>String(a.numero||'').localeCompare(String(b.numero||'')));
+      analizado=true;
+      pintar();
+      const pend=resultados.filter(r=>r.estado==='clasificable'&&!r.receptor_actual).length;
+      setEstado('Análisis concluido. '+pend+' factura(s) listas para clasificar.');
+      $('btn-aplicar').disabled=pend===0;
+      $('btn-exportar').disabled=false;
+    }catch(err){
+      setEstado('El análisis no pudo completarse.');
+      mensaje('err',esc(err.message||err));
+    }finally{
+      $('btn-analizar').disabled=false;
+    }
+  }
+
+  function pintar(){
+    $('resultados').classList.remove('hide');
+    const c=e=>resultados.filter(r=>r.estado===e).length;
+    const disc=resultados.filter(r=>r.discrepancias.length).length;
+    const kpi=(l,v,col)=>`<div class="card" style="margin:0;border-top:2px solid ${col};border-radius:0 0 12px 12px"><div class="lbl">${l}</div><div class="big" style="color:${col}">${v}</div></div>`;
+    $('kpis').innerHTML=
+      kpi('Facturas analizadas',resultados.length,'var(--text)')+
+      kpi('Clasificables por CFDI',c('clasificable'),'var(--green)')+
+      kpi('Requieren revisión',c('sin_xml')+c('error_lectura')+c('error_descarga')+c('no_autorizado'),'var(--yellow)')+
+      kpi('Con discrepancias',disc,'var(--red)');
+
+    $('entidades').innerHTML=Object.values(entidades).map(e=>{
+      const lista=resultados.filter(r=>r.estado==='clasificable'&&r.receptor===e.rfc);
+      const sum=m=>lista.filter(r=>(r.moneda||'').toUpperCase()===m).reduce((a,r)=>a+r.total,0);
+      const cnt=m=>lista.filter(r=>(r.moneda||'').toUpperCase()===m).length;
+      return `<div class="card" style="margin:0;border-left:3px solid ${e.color};border-radius:0 12px 12px 0">
+        <div class="row" style="margin-bottom:10px"><span style="font-size:14px;font-weight:700"><span class="dot" style="background:${e.color}"></span>${esc(e.nombre)}</span><span class="mono" style="color:var(--muted)">${esc(e.rfc)}</span></div>
+        <div class="lbl">Facturas</div><div class="ln" style="font-size:20px">${lista.length}</div>
+        <div class="lbl" style="margin-top:8px">Monto facturado</div>
+        <div class="ln"><span class="cur cm">MXN</span><span style="color:var(--mxn)">$${fmt(sum('MXN'))}</span> <span class="sub" style="font-weight:400">· ${cnt('MXN')} fact.</span></div>
+        <div class="ln"><span class="cur cu">USD</span><span style="color:var(--usd)">$${fmt(sum('USD'))}</span> <span class="sub" style="font-weight:400">· ${cnt('USD')} fact.</span></div>
+      </div>`;
+    }).join('');
+
+    const conDisc=resultados.filter(r=>r.discrepancias.length);
+    const filasDisc=conDisc.map(r=>{
+      const folioDistinto=r.discrepancias.some(d=>d.campo==='Folio fiscal'&&d.registrado!=='Sin capturar');
+      const monedaDistinta=r.discrepancias.some(d=>d.campo==='Moneda');
+      const dif=Math.abs((r.cfdi?r.cfdi.total:0)-r.total);
+      const menor=!folioDistinto&&!monedaDistinta&&dif<=2;
+      const nota=folioDistinto?'El CFDI corresponde a otra factura: no se corrige desde aquí.'
+                :monedaDistinta?'Moneda distinta: confirme cómo se pagó antes de corregir.'
+                :!menor?'Diferencia mayor: confirme con Compras antes de corregir.':'Diferencia menor de captura.';
+      return `<tr>
+        <td><input type="checkbox" class="chk-corr" data-id="${r.id}" ${menor?'checked':''} ${folioDistinto?'disabled':''} onchange="actualizarBotonCorregir()"></td>
+        <td class="mono">${esc(r.numero||'—')}</td><td>${esc(r.razon_social||'—')}</td>
+        <td>${r.discrepancias.map(d=>`<div><b>${esc(d.campo)}</b>: <span class="mono">${esc(d.registrado)}</span> → <span class="mono" style="color:var(--green)">${esc(d.cfdi)}</span></div>`).join('')}</td>
+        <td style="color:${menor?'var(--muted)':'var(--yellow)'}">${nota}</td></tr>`;
+    }).join('');
+    $('tabla-discrepancias').innerHTML=filasDisc
+      ?`<table><tr><th></th><th>Folio</th><th>Proveedor</th><th>Registrado → Según CFDI</th><th>Observación</th></tr>${filasDisc}</table>`
+      :'<div class="empty">Sin discrepancias. Los datos registrados coinciden con los CFDI.</div>';
+    actualizarBotonCorregir();
+
+    const motivo={sin_xml:'Sin XML registrado',error_descarga:'No fue posible descargar el XML',error_lectura:'XML con formato no válido',no_autorizado:'Receptor fuera del catálogo'};
+    const filasExc=resultados.filter(r=>motivo[r.estado]).map(r=>
+      `<tr><td class="mono">${esc(r.numero||'—')}</td><td>${esc(r.razon_social||'—')}</td>
+       <td><span class="cur ${(r.moneda||'').toUpperCase()==='USD'?'cu':'cm'}">${esc(r.moneda||'—')}</span></td>
+       <td class="r">$${fmt(r.total)}</td><td>${esc(r.status)}</td>
+       <td><span class="pill" style="color:var(--yellow)">${motivo[r.estado]}</span>${r.estado==='no_autorizado'?`<div class="mono" style="color:var(--muted);margin-top:4px">${esc(r.receptor||'Sin RFC')} ${esc(r.receptor_nombre||'')}</div>`:''}${r.error?`<div class="mono" style="color:var(--muted);margin-top:4px">${esc(r.error)}</div>`:''}</td></tr>`).join('');
+    $('tabla-excepciones').innerHTML=filasExc
+      ?`<table><tr><th>Folio</th><th>Proveedor</th><th>Moneda</th><th class="r">Total</th><th>Estado</th><th>Motivo</th></tr>${filasExc}</table>`
+      :'<div class="empty">Todas las facturas pueden clasificarse a partir de su CFDI.</div>';
+  }
+
+  async function aplicar(){
+    const pendientes=resultados.filter(r=>r.estado==='clasificable'&&!r.receptor_actual);
+    if(!pendientes.length) return;
+    const resumen=Object.values(entidades).map(e=>e.nombre+': '+pendientes.filter(r=>r.receptor===e.rfc).length).join('\n');
+    if(!confirm('Se registrará la entidad receptora de '+pendientes.length+' factura(s), tomada de su CFDI.\n\n'+resumen+
+                '\n\nNo se modifican montos, estatus ni pagos. ¿Desea continuar?')) return;
+
+    $('btn-aplicar').disabled=true; $('btn-analizar').disabled=true; setProgreso(0);
+    let ok=0; const fallas=[];
+    setEstado('Registrando clasificación…');
+    await enParalelo(pendientes,4,async r=>{
+      const cambios={receptor_rfc:r.receptor,receptor_origen:'cfdi'};
+      if(r.emisor) cambios.emisor_rfc=r.emisor;
+
+      const {data,error}=await sb.from('facturas').update(cambios)
+        .eq('id',r.id).is('receptor_rfc',null).select('id');
+      if(error) fallas.push({numero:r.numero,error:error.message});
+      else if(data&&data.length){ ok++; r.receptor_actual=r.receptor; r.origen_actual='cfdi'; }
+    },setProgreso);
+
+    if(fallas.length){
+      mensaje('warn',`Se clasificaron ${ok} factura(s). ${fallas.length} no pudieron registrarse:<br>`+
+        fallas.slice(0,10).map(f=>esc(f.numero)+' — '+esc(f.error)).join('<br>'));
+    }else{
+      mensaje('ok',`Clasificación registrada en ${ok} factura(s).`);
+    }
+    setEstado('Proceso concluido.');
+    $('btn-analizar').disabled=false;
+  }
+
+  function actualizarBotonCorregir(){
+    const n=document.querySelectorAll('.chk-corr:checked').length;
+    const b=$('btn-corregir'); if(!b) return;
+    b.disabled=n===0;
+    b.textContent=n?`Corregir ${n} factura(s) con el CFDI`:'Corregir seleccionadas con el CFDI';
+  }
+
+  function datosFiscalesDelCFDI(x){
+    const ret=x.retenciones||[];
+    return {
+      monto_sin_iva:Math.round((x.subtotal-x.descuento)*100)/100,
+      iva_tasa:x.ivaTasa!==null?x.ivaTasa:0,
+      iva_monto:x.ivaMonto,
+      retenciones:ret,
+      total_retenciones:Math.round(ret.reduce((a,b)=>a+b,0)*100)/100,
+      total:x.total,
+      moneda:x.moneda,
+      tipo_cambio:x.tipoCambio>0?x.tipoCambio:null
+    };
+  }
+
+  async function corregirSeleccionadas(){
+    const ids=[...document.querySelectorAll('.chk-corr:checked')].map(c=>c.dataset.id);
+    const lista=resultados.filter(r=>ids.includes(r.id)&&r.cfdi);
+    if(!lista.length) return;
+    const detalle=lista.map(r=>`${r.numero}: $${fmt(r.total)} ${r.moneda} → $${fmt(r.cfdi.total)} ${r.cfdi.moneda}`).join('\n');
+    if(!confirm('Se corregirán con los datos del CFDI (subtotal, IVA, retenciones, total, moneda y tipo de cambio):\n\n'+detalle+
+                '\n\nLos pagos registrados no se modifican. ¿Desea continuar?')) return;
+    $('btn-corregir').disabled=true; setProgreso(0);
+    let ok=0; const fallas=[];
+    const {data:{session}}=await sb.auth.getSession();
+    const {data:yo}=await sb.from('profiles').select('role').eq('id',session.user.id).single();
+    await enParalelo(lista,3,async r=>{
+      const nuevo=datosFiscalesDelCFDI(r.cfdi);
+      const antes={};
+      Object.keys(nuevo).forEach(k=>antes[k]=r.reg[k]);
+      const {data,error}=await sb.from('facturas').update(nuevo).eq('id',r.id).select('id');
+      if(error||!data||!data.length){ fallas.push({numero:r.numero,error:error?error.message:'Sin permiso de actualización'}); return; }
+      ok++;
+      await sb.from('audit_log').insert({user_id:session.user.id,user_role:yo?yo.role:'admin',action:'EDIT',entity:'factura',entity_id:r.id,
+        detail:{accion:'datos fiscales corregidos con el CFDI',numero:r.numero,antes,despues:nuevo}});
+    },setProgreso);
+    if(fallas.length) mensaje('warn',`Se corrigieron ${ok} factura(s). ${fallas.length} no pudieron corregirse:<br>`+fallas.map(f=>esc(f.numero)+' — '+esc(f.error)).join('<br>'));
+    else mensaje('ok',`Datos fiscales corregidos en ${ok} factura(s). Repita el análisis para confirmar.`);
+    setEstado('Corrección concluida.');
+  }
+
+  function exportar(){
+    if(!analizado) return;
+    const estadoTxt={clasificable:'Clasificable por CFDI',sin_xml:'Sin XML registrado',error_descarga:'No fue posible descargar el XML',error_lectura:'XML con formato no válido',no_autorizado:'Receptor fuera del catálogo'};
+    const hoja1=resultados.map(r=>({
+      'Folio':r.numero,'Proveedor':r.razon_social,'Estatus':r.status,'Moneda':r.moneda,'Total':r.total,
+      'RFC receptor (CFDI)':r.receptor||'','Entidad':entidades[r.receptor]?entidades[r.receptor].nombre:'',
+      'RFC emisor (CFDI)':r.emisor||'','Resultado':estadoTxt[r.estado]||'','Discrepancias':r.discrepancias.length,
+      'Entidad registrada':r.receptor_actual||'','Origen':r.origen_actual||''
+    }));
+    const hoja2=resultados.flatMap(r=>r.discrepancias.map(d=>({
+      'Folio':r.numero,'Proveedor':r.razon_social,'Campo':d.campo,'Registrado en el portal':d.registrado,'Según CFDI':d.cfdi
+    })));
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(hoja1),'Clasificación');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(hoja2.length?hoja2:[{'Resultado':'Sin discrepancias'}]),'Discrepancias');
+    const hoy=new Date().toLocaleDateString('en-CA',{timeZone:'America/Mexico_City'});
+    XLSX.writeFile(wb,'Clasificacion_entidades_'+hoy+'.xlsx');
+  }
+</script>
+</body>
+</html>
